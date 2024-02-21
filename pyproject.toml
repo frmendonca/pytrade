@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "pytrade"
+version = "0.1.0"
+description = "A package to optimize investment portfolios"
+authors = ["frmendonca <francisco.tmendonca@hotmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "*"
+yfinance = "*"
+scipy = "*"
+pyarrow = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
