@@ -2,7 +2,7 @@
 import pandas as pd
 from typing import Optional
 from dataclasses import dataclass
-from pytrade.data_models.base import Stock
+from pytrade.data_models.stock import Stock
 
 @dataclass(repr=True)
 class Portfolio:
@@ -23,25 +23,17 @@ class Portfolio:
     """
 
     shares: dict[str, float]
-    betas: Optional[dict[str, float]]
+    betas: Optional[dict[str, float]] = None
     
     def build_portfolio(self) -> None:
         self.portfolio = {
-            k: Stock(ticker = k, historical_depth = 10, returns_freq = 30)
-            for k in self.shares.keys()
+            ticker: Stock(ticker = ticker)
+            for ticker in self.shares.keys()
         }
 
     def _get_stock_data(self):
         for stock in self.portfolio.values():
             stock.get_stock_data()
 
-    def _current_market_value(self) -> None:
-        self.market_value = sum([v.stock_data["Close"].values[-1] for v in self.portfolio.values()])
-
-
-
-
-portfolio = Portfolio(
-    shares = {"AAPL": 1},
-    betas = None
-)
+    def _compute_market_value(self) -> None:
+        self.market_value = sum([stock.stock_data["Close"].values[-1] for stock in self.portfolio.values()])
