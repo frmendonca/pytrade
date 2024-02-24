@@ -11,25 +11,17 @@ class Stock:
     A definition of a stock.
     """
     ticker: str
-    historical_depth: int | None
-    returns_freq: int | None
+    historical_depth: str = "1y"
+    returns_freq: int = 1
     
     def get_stock_data(self) -> pd.DataFrame:
         self.stock_data = (
             Ticker(self.ticker)
-            .history(self._convert_year_to_period_str(self.historical_depth))
-            .pipe(self._transform_stock_data, self.returns_freq)
+            .history(self.historical_depth)
+            .pipe(self._compute_returns, self.returns_freq)
         )
- 
 
-    def _convert_year_to_period_str(self, year: int | None = None) -> str:
-        if year is None:
-            return "100y"
-        else:
-            return str(year) + "y"
-
-
-    def _transform_stock_data(self, df: pd.DataFrame, returns_freq: int = 1) -> pd.DataFrame:
+    def _compute_returns(self, df: pd.DataFrame, returns_freq: int = 1) -> pd.DataFrame:
         return (
             df
             [["Close"]]
