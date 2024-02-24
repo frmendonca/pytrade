@@ -10,10 +10,13 @@ class Option:
     """
     Defines an option contract
     """
-    direction: str = "P"
     strike: float
     premium: float
-    contracts: int = 1
+    days_expiry: int
+    r: float
+    implied_vol: float
+    contracts: int = 0
+    direction: str = "P"
 
 
     def intrinsic_value(self, underlying: float) -> float:
@@ -26,14 +29,14 @@ class Option:
             return self.contracts*max(underlying - self.strike, 0)
         
     
-    def compute_black_scholes_price(self, underlying, t, r, s) -> float:
+    def compute_black_scholes_price(self, underlying) -> float:
         """
         Compute an option price using the Black-Scholes formula
         """
+        if self.direction == "P":
+            d1 = (math.log(underlying / self.strike) + (self.r + 0.5 * self.implied_vol ** 2) * self.days_expiry) / (self.implied_vol * math.sqrt(self.days_expiry))
+            d2 = d1 - self.implied_vol * math.sqrt(self.days_expiry)
 
-        d1 = (math.log(underlying / self.strike) + (r + 0.5 * s ** 2) * t) / (s * math.sqrt(t))
-        d2 = d1 - s * math.sqrt(t)
+            put_price = self.strike * math.exp(-self.r * self.days_expiry) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
 
-        put_price = self.strike * math.exp(-r * t) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
-
-        return put_price
+            return put_price

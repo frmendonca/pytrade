@@ -25,15 +25,23 @@ class Portfolio:
     shares: dict[str, float]
     betas: Optional[dict[str, float]] = None
     
-    def build_portfolio(self) -> None:
+    def fit_portfolio(self) -> None:
         self.portfolio = {
             ticker: Stock(ticker = ticker)
             for ticker in self.shares.keys()
         }
+
+        self._get_stock_data()
+        self._compute_market_value()
 
     def _get_stock_data(self):
         for stock in self.portfolio.values():
             stock.get_stock_data()
 
     def _compute_market_value(self) -> None:
-        self.market_value = sum([stock.stock_data["Close"].values[-1] for stock in self.portfolio.values()])
+        self.market_value = sum(
+            [
+                self.portfolio[ticker].stock_data["Close"].values[-1].item()*self.shares[ticker]
+                for ticker in self.shares.keys()
+            ]
+        )

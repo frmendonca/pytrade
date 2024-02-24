@@ -11,7 +11,7 @@ class Stock:
     A definition of a stock.
     """
     ticker: str
-    historical_depth: str = "1d"
+    historical_depth: str = "1y"
     returns_freq: int = 1
     
     def get_stock_data(self) -> pd.DataFrame:
