@@ -1,5 +1,6 @@
 
 import math
+import numpy as np
 
 from dataclasses import dataclass
 from scipy.stats import norm
@@ -10,11 +11,11 @@ class Option:
     """
     Defines an option contract
     """
-    strike: float
-    premium: float
-    days_expiry: int
-    r: float
-    implied_vol: float
+    strike: float = None
+    premium: float = None
+    days_expiry: int = None
+    r: float = None
+    iv: float = None
     contracts: int = 0
     direction: str = "P"
 
@@ -31,12 +32,11 @@ class Option:
     
     def compute_black_scholes_price(self, underlying) -> float:
         """
-        Compute an option price using the Black-Scholes formula
+        Compute the Black-Scholes price of a put option.
+        :param underlying - underlying market price
+        :returns float: Black-Scholes put option price
         """
-        if self.direction == "P":
-            d1 = (math.log(underlying / self.strike) + (self.r + 0.5 * self.implied_vol ** 2) * self.days_expiry) / (self.implied_vol * math.sqrt(self.days_expiry))
-            d2 = d1 - self.implied_vol * math.sqrt(self.days_expiry)
-
-            put_price = self.strike * math.exp(-self.r * self.days_expiry) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
-
-            return put_price
+        d1 = (np.log(underlying / self.strike) + (self.r + 0.5 * self.iv ** 2) * self.days_expiry/365) / (self.iv * np.sqrt(self.days_expiry/365))
+        d2 = d1 - self.iv * np.sqrt(self.days_expiry/365)
+        put_price = self.strike * np.exp(-self.r * self.days_expiry/365) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
+        return put_price
