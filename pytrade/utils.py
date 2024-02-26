@@ -1,24 +1,24 @@
 
+import datetime
 import math
-from scipy.stats import norm
+import numpy as np
+from typing import Iterable
 
-def black_scholes_put(S, K, T, r, sigma):
-    """
-    Calculate the Black-Scholes put option price.
 
-    Parameters:
-    S (float): Current stock price
-    K (float): Option strike price
-    T (float): Time to expiration (in years)
-    r (float): Risk-free interest rate
-    sigma (float): Volatility of the underlying stock
+def timestamp():
+    return datetime.datetime.today().strftime("%Y%m%d_%HH%MM%SS")
 
-    Returns:
-    float: Put option price
-    """
-    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
+def return_frequency_to_minor(return_frequency: int) -> int:
+    return math.floor(360/return_frequency)
 
-    put_price = K * math.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-    
-    return put_price
+def compute_compound_returns(sequence: Iterable) -> Iterable:
+    return np.prod(1 + sequence, axis = 1)
+
+def compute_statistics(sequence: Iterable, n:int) -> dict[str, float]:
+    return {
+            'CAGR - Median': np.median(sequence**(1/(n)) - 1),
+            'CAGR - 5th percentile': np.quantile(sequence**(1/(n)) - 1, 0.05),
+            'Probability of negative CAGR': np.mean(sequence < 1)
+        }
+
+

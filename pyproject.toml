@@ -8,7 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 pandas = "*"
-yfinance = "*"
+yfinance = "0.2.37"
 scipy = "*"
 pyarrow = "*"
 

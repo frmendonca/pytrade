@@ -648,13 +648,13 @@ files = [
 
 [[package]]
 name = "yfinance"
-version = "0.2.36"
+version = "0.2.37"
 description = "Download market data from Yahoo! Finance API"
 optional = false
 python-versions = "*"
 files = [
-    {file = "yfinance-0.2.36-py2.py3-none-any.whl", hash = "sha256:700f8b8fb51d4f7ca31bcef042175be68b2f39ed680a99170163e5f54874e2a6"},
-    {file = "yfinance-0.2.36.tar.gz", hash = "sha256:5367c0538cf57bb0dd393ca24866cda1ab5d4aba47e375e549760652a4a19fc2"},
+    {file = "yfinance-0.2.37-py2.py3-none-any.whl", hash = "sha256:3ac75fa1cd3496ee76b6df5d63d29679487ea9447123c5b935d1593240737a8f"},
+    {file = "yfinance-0.2.37.tar.gz", hash = "sha256:e5f78c9bd27bae7abfd0af9b7996620eaa9aba759d67f957296634d7d54f0cef"},
 ]
 
 [package.dependencies]
@@ -677,4 +677,4 @@ repair = ["scipy (>=1.6.3)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "fc05d1f96bac48dfec61d04fe1d045e10676868da15e58ce5c126199c3294ae6"
+content-hash = "6f4b0e40e41b3ff97fc571c008c6c44416e04df6ef4341a84b7c1950d2ac5cf1"
