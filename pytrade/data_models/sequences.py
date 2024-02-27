@@ -59,7 +59,7 @@ class Sequences():
             hedge_future_value = np.array([self._option.compute_black_scholes_price(s) for s in underlying_future])
             hedge_return = (hedge_future_value - self._option.premium)/self._option.premium
 
-            self.sequence = (1 - hedge_allocation)*r + hedge_allocation*hedge_return
+            self.sequence = (1 - hedge_allocation)*r*self._portfolio.portfolio_beta + hedge_allocation*hedge_return
 
 
     def _get_initial_specs(self) -> None:
