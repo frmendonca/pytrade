@@ -33,6 +33,7 @@ class Portfolio:
 
         self._get_stock_data()
         self._compute_market_value()
+        self._compute_portfolio_betas()
 
     def _get_stock_data(self):
         for stock in self.portfolio.values():
@@ -45,3 +46,15 @@ class Portfolio:
                 for ticker in self.shares.keys()
             ]
         )
+
+    def _compute_portfolio_betas(self) -> None:
+        if self.betas == None:
+            self.portfolio_beta = 1
+        else:
+            self.portfolio_beta = sum(
+                [
+                    self.portfolio[ticker].stock_data["Close"].values[-1].item()*self.shares[ticker]*self.betas[ticker]
+                    for ticker in self.shares.keys()
+                ]
+            )/self.market_value
+        
