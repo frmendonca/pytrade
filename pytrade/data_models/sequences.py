@@ -44,7 +44,7 @@ class Sequences():
         self._get_initial_specs()
 
         if (self._option.contracts == 0) | (self._option == None):
-            self.sequence = np.random.choice(self._specs.stock_data["returns"], size = 50000, replace = True)
+            self.sequence = np.random.choice(self._specs.stock_data["returns"], size = 50000, replace = True)*self._portfolio.portfolio_beta
         else:
             if self._portfolio == None:
                 raise RuntimeError("Requires a portfolio to compute sequences")
