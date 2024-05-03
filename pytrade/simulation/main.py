@@ -62,7 +62,7 @@ def main():
     return_sequences = np.array(
         [
             np.random.choice(sequences.sequence, size = number_of_periods, replace = True)
-            for _ in range(50000)
+            for _ in range(200000)
         ]
     )
     compound_returns = compute_compound_returns(return_sequences)
