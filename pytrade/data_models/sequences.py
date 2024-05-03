@@ -1,8 +1,16 @@
 
 import numpy as np
+
 from pytrade.data_models.options import Option
 from pytrade.data_models.stock import Stock
 from pytrade.data_models.portfolio import Portfolio
+from pytrade.utils import (
+    beta_weight_return_distribution,
+    compute_future_underlying,
+    compute_hedge_allocation,
+    compute_hedge_return,
+    simulate_iv_change
+    )
 
 class Sequences():
 
@@ -43,23 +51,31 @@ class Sequences():
         # We can access this data with self._specs.stock_data
         self._get_initial_specs()
 
+        return_sequence = beta_weight_return_distribution(
+            self._specs.stock_data["returns"], self._portfolio.portfolio_beta
+        )
+
         if (self._option.contracts == 0) | (self._option == None):
-            self.sequence = np.random.choice(self._specs.stock_data["returns"], size = 50000, replace = True)*self._portfolio.portfolio_beta
+            self.sequence = return_sequence
         else:
             if self._portfolio == None:
                 raise RuntimeError("Requires a portfolio to compute sequences")
             
-            r = np.random.choice(self._specs.stock_data["returns"], size = 50000, replace = True)
-            hedge_cost = 100*self._option.contracts*self._option.premium
-            hedge_allocation = hedge_cost/self._portfolio.market_value
-    
-            underlying_current = self._specs.stock_data["Close"].values[-1]
-            underlying_future = underlying_current*(1+r)
-            self._option.days_expiry -= self._base_returns_freq
-            hedge_future_value = np.array([self._option.compute_black_scholes_price(s) for s in underlying_future])
-            hedge_return = (hedge_future_value - self._option.premium)/self._option.premium
+            hedge_allocation = compute_hedge_allocation(
+                self._portfolio.market_value,
+                self._option.contracts,
+                self._option.premium
+            )
 
-            self.sequence = (1 - hedge_allocation)*r*self._portfolio.portfolio_beta + hedge_allocation*hedge_return
+            underlying_current = self._specs.stock_data["Close"].values[-1]
+            underlying_future = compute_future_underlying(underlying_current, return_sequence)
+            self._option.days_expiry -= self._base_returns_freq
+
+            # Simulate new option IV
+            new_options = simulate_iv_change(return_sequence, self._option)
+            hedge_return = compute_hedge_return(self._option, underlying_future)
+
+            self.sequence = (1 - hedge_allocation)*return_sequence + hedge_allocation*hedge_return
 
 
     def _get_initial_specs(self) -> None:
