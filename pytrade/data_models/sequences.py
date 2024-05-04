@@ -73,7 +73,7 @@ class Sequences():
 
             # Simulate new option IV
             new_options = simulate_iv_change(return_sequence, self._option)
-            hedge_return = compute_hedge_return(self._option, underlying_future)
+            hedge_return = compute_hedge_return(new_options, underlying_future)
 
             self.sequence = (1 - hedge_allocation)*return_sequence + hedge_allocation*hedge_return
 
