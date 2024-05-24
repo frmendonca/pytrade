@@ -8,8 +8,7 @@ from pytrade.utils import (
     beta_weight_return_distribution,
     compute_future_underlying,
     compute_hedge_allocation,
-    compute_hedge_return,
-    simulate_iv_change
+    compute_hedge_return
     )
 
 class Sequences():
@@ -71,9 +70,7 @@ class Sequences():
             underlying_future = compute_future_underlying(underlying_current, return_sequence)
             self._option.days_expiry -= self._base_returns_freq
 
-            # Simulate new option IV
-            new_options = simulate_iv_change(return_sequence, self._option)
-            hedge_return = compute_hedge_return(new_options, underlying_future)
+            hedge_return = compute_hedge_return(self._option, underlying_future)
 
             self.sequence = (1 - hedge_allocation)*return_sequence + hedge_allocation*hedge_return
 

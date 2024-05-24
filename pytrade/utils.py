@@ -48,7 +48,7 @@ def beta_weight_return_distribution(return_sample: pd.Series, portfolio_beta: fl
     :param portfolio_beta: float is the portfolio beta
     :return np.array with beta weighted returns
     """
-    return np.random.choice(return_sample, size = len(return_sample), replace = False)*portfolio_beta
+    return np.random.choice(return_sample, size = 100000, replace = True)*portfolio_beta
 
 
 def compute_hedge_allocation(
@@ -92,65 +92,3 @@ def compute_hedge_return(
         hedge_return = (hedge_future_value - option.premium)/option.premium
     
     return hedge_return
-
-
-def simulate_iv_change(
-        return_sample: np.array,
-        option: Option
-) -> List[Option]:
-    """
-    This method takes in the option contract and the return sequence and simulates the IV change for this contract
-    The result is a multiplication of the option: Option object where each one has different IV
-    :param return_sample: np.array the return sequence
-    :param option: Option - the option contract
-    :return List[Option] one new option contract with simulated IV
-    """
-    # Simulate VIX returns based on stock returns
-    vix_returns = simulate_vix_returns(return_sample)
-
-    # Apply these to option IV
-    new_option_iv = option.iv*(1 + vix_returns)
-
-    # Generate list of option contracts that are replicas of the original option contract
-    #   where we change iv
-    list_options = []
-    for new_iv in new_option_iv:
-        new_option = deepcopy(option)
-        new_option.iv = new_iv
-        list_options.append(new_option)
-    
-    return list_options
-
-
-
-def simulate_vix_returns(return_sample: np.array) -> np.array:
-    """
-    This method simulates the VIX returns based on historical observations of stock market returns
-    :param return_sample: np.array the return sequence
-    :return an array with VIX returns
-    """
-    def conditional_gaussian(el: float) -> float:
-        if el <= -0.25:
-            return np.random.normal(loc = 2.505734, scale = 0.834054, size = 1)
-        elif el <= -0.20:
-            return np.random.normal(loc = 2.505734, scale = 0.834054, size = 1)
-        elif el <= -0.15: 
-            return np.random.normal(loc = 0.715229	, scale = 0.655405, size = 1)
-        elif el <=  -0.1:   
-            return np.random.normal(loc = 0.561455	, scale = 0.382293, size = 1)
-        elif el <= -0.05:   
-            return np.random.normal(loc = 0.342596	, scale = 0.356637, size = 1)
-        elif el <= 0.0:	    
-            return np.random.normal(loc = 0.123496	, scale = 0.224343, size = 1)
-        elif el <= 0.05:    
-            return np.random.normal(loc = -0.038899, scale = 0.160567, size = 1)
-        elif el <= 0.1:     
-            return np.random.normal(loc = -0.147999, scale = 0.150062, size = 1)
-        elif el <= 0.15:    
-            return np.random.normal(loc = -0.231449, scale = 0.143455, size = 1)
-        else:
-            return np.random.normal(loc = -0.371148, scale = 0.133988, size = 1)
-
-
-    draw_vectorized = np.vectorize(conditional_gaussian)
-    return draw_vectorized(return_sample)
