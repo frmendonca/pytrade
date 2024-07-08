@@ -73,6 +73,3 @@ class Simulator:
                 statistics = compute_simulation_statistics(simulated_returns, self.sim_params["nb_year"])
                 model_result = (option.strike, number_contracts, statistics['median'], statistics['average'], statistics['percentile_5th'])
                 self.model_results.append(model_result)
-
-                print(self.model_results)
-                
