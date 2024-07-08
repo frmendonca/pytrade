@@ -3,6 +3,9 @@
 import typer
 from typing import Iterable
 from pytrade.simulation.simulation import Simulator
+from pytrade.utils import df_factory
+
+
 
 cli_app = typer.Typer(name="pytrade")
 
@@ -21,5 +24,12 @@ def simulate_hedged_path(
     
     simulator = Simulator()
     simulator.simulate(number_contracts=number_contracts)
-
+    
+    model_results_df_factory = df_factory(columns = ["strike", "nb_contracts", "geom_return", "avg_return", "percentile_5"])
+    df_results = model_results_df_factory(simulator.model_results)
+    df_results.to_csv("fdff.csv")
     typer.echo("Done")
+
+
+if __name__ == "__main__":
+    cli_app()
