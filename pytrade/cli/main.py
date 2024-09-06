@@ -18,16 +18,14 @@ def dummy() -> None:
 
 
 @cli_app.command()
-def simulate_hedged_path(
-    number_contracts: int = typer.Option(help="Nummber of put options", default=0)
-) -> None:
+def simulate_hedged_path() -> None:
     
     simulator = Simulator()
-    simulator.simulate(number_contracts=number_contracts)
+    simulator.simulate()
     
-    model_results_df_factory = df_factory(columns = ["strike", "nb_contracts", "geom_return", "avg_return", "percentile_5"])
+    model_results_df_factory = df_factory(columns = ["geom_return", "avg_return", "percentile_5"])
     df_results = model_results_df_factory(simulator.model_results)
-    df_results.to_csv("fdff.csv")
+    df_results.to_csv("model_result.csv", index=False)
     typer.echo("Done")
 
 
