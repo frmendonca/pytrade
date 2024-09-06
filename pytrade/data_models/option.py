@@ -28,12 +28,14 @@ class Option:
         strike: float,
         premium: float,
         expiry: str,
+        contracts: int,
         underlying: OptionUnderlying,
         **kwargs
     ):
         self.strike=strike
         self.expiry=datetime.strptime(expiry, "%Y-%m-%d").date()
         self.premium=premium
+        self.contracts=contracts
         self.underlying=underlying
         
         # Compute DTE
@@ -48,7 +50,7 @@ class Option:
 
     def __repr__(self):
         cls=self.__class__.__name__
-        return f"{cls}(ticker={self.ticker}, strike={self.strike}, premium={self.premium}, contracts={self.contracts}, dte={self.days_to_expiry})"  
+        return f"{cls}(ticker={self.underlying.ticker}, strike={self.strike}, premium={self.premium}, contracts={self.contracts}, dte={self.days_to_expiry})"  
 
 
     def compute_black_scholes_put_option_price(self, underlying_price, days_to_expiry) -> float:

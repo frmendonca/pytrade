@@ -1,4 +1,5 @@
 {
+    "sampling_ticker": "^SPX",
     "nb_sim": 50000,
     "nb_year": 10,
     "deposit": 2000,

@@ -38,3 +38,11 @@ class Portfolio:
                 for stock in self.portfolio
             ]
         )
+
+        # Compute portfolio beta
+        self.beta = sum(
+            [
+                stock.beta*stock.ticker_price*stock.quantity
+                for stock in self.portfolio
+            ]
+        )/self.market_value
