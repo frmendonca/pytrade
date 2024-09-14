@@ -1,9 +1,10 @@
 {
     "SPY": [
-        {"strike": 515, "premium": 4.97, "expiry": "2024-10-11", "contracts": 0},
-        {"strike": 485, "premium": 2.00, "expiry": "2024-10-11", "contracts": 0},
-        {"strike": 470, "premium": 1.39, "expiry": "2024-10-11", "contracts": 0},
-        {"strike": 460, "premium": 1.14, "expiry": "2024-10-11", "contracts": 0},
-        {"strike": 430, "premium": 0.71, "expiry": "2024-10-11", "contracts": 0}
+        {"strike": 450, "premium": 1.22, "expiry": "2024-11-29", "contracts": 0},
+        {"strike": 464, "premium": 1.53, "expiry": "2024-11-29", "contracts": 1},
+        {"strike": 478, "premium": 1.97, "expiry": "2024-11-29", "contracts": 0},
+        {"strike": 492, "premium": 2.60, "expiry": "2024-11-29", "contracts": 0},
+        {"strike": 506, "premium": 3.51, "expiry": "2024-11-29", "contracts": 0},
+        {"strike": 520, "premium": 4.83, "expiry": "2024-11-29", "contracts": 0}
     ]
 }

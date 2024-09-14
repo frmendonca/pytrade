@@ -314,6 +314,23 @@ files = [
 tests = ["asttokens (>=2.1.0)", "coverage", "coverage-enable-subprocess", "ipython", "littleutils", "pytest", "rich"]
 
 [[package]]
+name = "finvizfinance"
+version = "1.0.1"
+description = "Finviz Finance. Information downloader."
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "finvizfinance-1.0.1-py3-none-any.whl", hash = "sha256:a3ab0030a8f10c8b63314ebc5772e9c8b9d99c7ddbe325c18adf07a759a79472"},
+    {file = "finvizfinance-1.0.1.tar.gz", hash = "sha256:9c67893fd8f1a6ef8c3d11de6845066f3ed34849fc905874468028ca235b7d30"},
+]
+
+[package.dependencies]
+beautifulsoup4 = "*"
+lxml = "*"
+pandas = "*"
+requests = "*"
+
+[[package]]
 name = "frozendict"
 version = "2.4.0"
 description = "A simple immutable dictionary"
@@ -1370,4 +1387,4 @@ repair = ["scipy (>=1.6.3)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.11"
-content-hash = "017f5b2ca26c3d760be4444d0c28ca7d24966b9048bf9f0e630f156f164a2f84"
+content-hash = "b1ccb58bca99e03198e8b5789004597bd1a941553effd421f2e03eb9c78e691f"
