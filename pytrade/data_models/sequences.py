@@ -6,6 +6,16 @@ from pytrade.data_models.portfolio import Portfolio
 from pytrade.data_models.option import Option
 from pytrade.data_models.stock import Stock
 
+from pytrade.simulation.constants import (
+    BREAKPOINT,
+    EPS,
+    SIG
+)
+
+
+def gpd_ppf(q: np.array, eps: float, sig: float) -> np.array:
+    return sig/eps*(q**-eps - 1)
+
 
 def hedge_future_price(
     sampling_stock: pd.DataFrame,
@@ -99,6 +109,17 @@ class Sequences:
         # Fetch sampling distribution ticker info
         self.sampling_stock = Stock(ticker=sim_params.get("sampling_ticker", "SPX"), quantity = 0, beta = 0.0)
         self.sampling_stock.load_stock_data(freq = sim_params.get("freq", 1))
+
+        
+        # Adjust the tail
+        self.sampling_stock.stock_data["returns"] = np.where(
+            self.sampling_stock.stock_data["returns"] < BREAKPOINT,
+            np.maximum(
+                -1.0, -(gpd_ppf(np.random.uniform(0, 1, size = self.sampling_stock.stock_data.shape[0]) , EPS, SIG) - BREAKPOINT)
+            ),
+            self.sampling_stock.stock_data["returns"]
+        )
+
 
         # Get hedge future values
         df_seq_returns = hedge_future_price(self.sampling_stock, self.option_list)

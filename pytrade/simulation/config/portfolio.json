@@ -1,10 +1,6 @@
 {
     "SXR8.DE": {
-        "quantity": 50,
+        "quantity": 56,
         "beta": 1.0
-    },
-    "NEM": {
-        "quantity": 200,
-        "beta": 0.754
     }
 }
