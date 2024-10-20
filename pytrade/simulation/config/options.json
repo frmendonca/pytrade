@@ -1,10 +1,5 @@
 {
     "SPY": [
-        {"strike": 450, "premium": 1.22, "expiry": "2024-11-29", "contracts": 0},
-        {"strike": 464, "premium": 1.53, "expiry": "2024-11-29", "contracts": 1},
-        {"strike": 478, "premium": 1.97, "expiry": "2024-11-29", "contracts": 0},
-        {"strike": 492, "premium": 2.60, "expiry": "2024-11-29", "contracts": 0},
-        {"strike": 506, "premium": 3.51, "expiry": "2024-11-29", "contracts": 0},
-        {"strike": 520, "premium": 4.83, "expiry": "2024-11-29", "contracts": 0}
+        {"strike": 551, "premium": 3.30, "expiry": "2024-11-15", "contracts": 1}
     ]
 }
