@@ -1,98 +1,100 @@
-import numpy as np
+
+import math
+
+from enum import Enum
 from scipy.stats import norm
 from datetime import datetime
-from scipy.optimize import minimize
-from pytrade.data_models.stock import Stock
 
 
-class OptionUnderlying:
-    def __init__(self, ticker: str, **kwargs):
-        self.ticker = ticker
+class OptionType(Enum):
+    CALL = "CALL"
+    PUT = "PUT"
 
-        # Obtain underlying data
-        self.stock = Stock(ticker = ticker, quantity = 100, beta = 1.0)
-        self.stock.load_stock_data(freq=kwargs["kwargs"].get("freq", 1))
-
+class OptionDirection(Enum):
+    LONG = "LONG"
+    SHORT = "SHORT"
 
 class Option:
     """
-    The Option object.
-    Represents a put option
+    An option object
 
-    :ivar expiry: date the date of option expiry
-    :ivar strike: float the strike price
-    :ivar premium: float the option's premium
+    :ivar strike: int the strike price of the option
+    :ivar premium: float the premium of the option
+    :ivar option_type: OptionType sets the type of the option as CALL or PUT
+    :ivar option_direction: OptionDirection sets the option as LONG or SHORT
+    :ivar expiration_date: str expiration date in format yyyy-mm-dd
+    :ivar contracts: int the number of contracts, where each unit represents 100 stocks
     """
     def __init__(
         self,
-        strike: float,
+        strike: int,
         premium: float,
-        expiry: str,
-        contracts: int,
-        underlying: OptionUnderlying,
-        **kwargs
+        iv: float,
+        r: float,
+        option_type: OptionType,
+        option_direction: OptionDirection,
+        expiration_date: str,
+        contracts: int
     ):
-        self.strike=strike
-        self.expiry=datetime.strptime(expiry, "%Y-%m-%d").date()
-        self.premium=premium
-        self.contracts=contracts
-        self.underlying=underlying
-        
-        # Compute DTE
-        self.days_to_expiry=(self.expiry - datetime.now().date()).days
-
-        # Fetch risk free rate
-        self.interest_rate=kwargs["kwargs"].get("risk_free_rate", 0.05) # TODO: Should probably have something for this
-
-        # Calibrate iv
-        self.calibrate_iv()
+        self._strike = strike
+        self._premium = premium
+        self._iv = iv
+        self._r = r
+        self._option_type = option_type
+        self._option_direction = option_direction
+        self._expiration_date = expiration_date
+        self._contracts = contracts
+        self._days_to_expiration = (
+            datetime.strptime(expiration_date, "%Y-%m-%d") - datetime.now()
+        ).days
 
 
     def __repr__(self):
         cls=self.__class__.__name__
-        return f"{cls}(ticker={self.underlying.ticker}, strike={self.strike}, premium={self.premium}, contracts={self.contracts}, dte={self.days_to_expiry})"  
+        return f"{cls}(strike={self._strike}, premium={self._premium}, dte={self._days_to_expiration}, iv={self._iv}, r={self._r})"  
 
 
-    def compute_black_scholes_put_option_price(self, underlying_price, days_to_expiry) -> float:
-        '''
-        Compute the price of a put option using the Black Scholes
-        model
-        '''
-        d1 = (np.log(underlying_price / self.strike) + (self.interest_rate + 0.5 * self.iv ** 2) * days_to_expiry/365) / (self.iv * np.sqrt(days_to_expiry/365))
-        d2 = d1 - self.iv * np.sqrt(days_to_expiry/365)
-        put_price = self.strike * np.exp(-self.interest_rate * days_to_expiry/365) * norm.cdf(-d2) - underlying_price * norm.cdf(-d1)
-        return put_price.item()
+    def compute_intrinsic_value(self, underlying: float):
+        if self._option_type == OptionType.CALL:
+            return 100*self._contracts*max(underlying - self._strike, 0)
+        else:
+            return 100*self._contracts*max(self._strike - underlying, 0)
     
 
-    def option_intrinsic_value(self, underlying_price: float) -> float:
+    def compute_black_scholes_value(
+        self,
+        underlying: float,
+        iv: float | None = None,
+        days_to_expiry: int | None = None
+    ):
         """
-        Computes an option's intrinsic value
-        :param underlying: float the underlying asset's current price
-        :return float the option's intrinsic value at expiration
+        Computes the value of the option using the black scholes 
+        formula.
+
+        :underlying a float value representing the current underlying value
+        :iv the implied volatility used to compute the formula
+        :r the risk free interest rate
+        :days_to_expiry optional parameter to compute the value at a specific DTE. 
+            If None it takes the option original DTE
         """
-        return max(self.strike - underlying_price, 0)
+        
+        if iv is None:
+            iv = self._iv
 
+        if days_to_expiry is None:
+            days_to_expiry = self._days_to_expiration
 
-    def calibrate_iv(self):
-        '''
-        Given the option premium and current underlying price,
-        computes the IV
-        '''
-        self.iv = 0.17 # Starting value
+        T = days_to_expiry / 365.0
 
-        def fn_to_minimize(iv):
-            self.iv = iv
-            model_price = self.compute_black_scholes_put_option_price(
-                underlying_price=self.underlying.stock.ticker_price,
-                days_to_expiry=self.days_to_expiry
-            )
-            true_price = self.premium
-            return (model_price - true_price)**2
+        # Calculate d1 and d2
+        d1 = (math.log(underlying / self._strike) + (self._r + 0.5 * iv**2) * T) / (iv * math.sqrt(T))
+        d2 = d1 - iv * math.sqrt(T)
 
-
-        optim = minimize(fun=fn_to_minimize, x0=0.15)
-        self.iv = optim.x
-
-
-
+        if self._option_type == OptionType.CALL:
+            price = underlying * norm.cdf(d1) - self._strike * math.exp(-self._r * T) * norm.cdf(d2)
+            return price
+        
+        elif self._option_type == OptionType.PUT:
+            price = self._strike * math.exp(-self._r * T) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
+            return price
 
