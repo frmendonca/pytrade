@@ -1,74 +1,153 @@
 
+import typing as t
 import numpy as np
-from typing import Union
-
-from pytrade.utils import read_json, df_factory
-from pytrade.data_models.portfolio import Portfolio
-from pytrade.data_models.option import Option, OptionUnderlying
-from pytrade.data_models.sequences import Sequences
-
-from pytrade.simulation.constants import (
-    PORTFOLIO_CONFIG_PATH,
-    OPTIONS_CONFIG_PATH,
-    SIMULATION_CONFIG_PATH
+from scipy.stats._distn_infrastructure import rv_continuous_frozen as RVContinuousFrozen
+from pytrade.data_models.base import SimulationConfig, SimulationResults
+from pytrade.data_models.option import (
+    Option,
+    OptionDirection
 )
 
 
-def compute_simulation_statistics(return_paths: np.array, num_year: int):
-    compounded_returns = np.cumprod(1 + return_paths, axis = 1)
-    avg_compounded_returns = np.mean(compounded_returns, axis = 0)
-    median_compounded_returns = np.median(compounded_returns, axis = 0)
-    pct5_compounded_returns = np.quantile(compounded_returns, axis = 0, q = 0.05)
-    
-    return {
-        "median": median_compounded_returns[-1]**(1/num_year) - 1,
-        "average": avg_compounded_returns[-1]**(1/num_year) - 1,
-        "percentile_5th": pct5_compounded_returns[-1]**(1/num_year) - 1,
-        "prob_neg_cagr": np.mean(compounded_returns[:,-1]**(1/num_year) - 1 < 0)
-    }
+def compute_hedge_cost(options: list[Option]) -> float:
+    """
+    Computes the total debit (credit if negative)
+    for a given option strategy
+    :param options: list[Option] a set of Option objects
+    :returns float the debt or credit (if negative) of the strategy
+    """
+
+    debit = sum(
+        [
+            100*option._premium*option._contracts if option._option_direction == OptionDirection.LONG else 0
+            for option in options
+        ]
+    )
+
+    credit = sum(
+        [
+            -100*option._premium*option._contracts if option._option_direction == OptionDirection.SHORT else 0
+            for option in options
+        ]
+    )
+
+    return debit + credit
 
 
-class Simulator:
-    def __init__(self) -> None:
-        self.sim_params = read_json(SIMULATION_CONFIG_PATH)
-        self.portfolio_config = read_json(PORTFOLIO_CONFIG_PATH)
-        self.option_config = read_json(OPTIONS_CONFIG_PATH)
-        self.model_results = []
+def compute_intrinsic_hedge_value(options: list[Option], underlying: float):
+    """
+    Computes the value of an hedge using intrinsic value
+    and assuming oposite direction to that of the Option.
+    For a SHORT call it assumes it will be bought to close
+    resulting in a debit and for a LONG call it assumes it
+    will be sold to close resulting in a credit.
+    In all computations it uses options instrinsic value
+    at expiration.
+
+    :param options a list of Option ojects
+    :returns float value of the hedge
+    """
+    sell_to_close = sum(
+        [
+            100*option.compute_intrinsic_value(underlying) if option._option_direction == OptionDirection.LONG else 0
+            for option in options
+        ]
+    )
+
+    buy_to_close = sum(
+        [
+            -100*option.compute_intrinsic_value(underlying) if option._option_direction == OptionDirection.SHORT else 0
+            for option in options
+        ]
+    )
+
+    return sell_to_close + buy_to_close
 
 
-    def simulate(self):
-        # Load the portfolio
-        print("Loading portfolio")
-        portfolio = Portfolio(self.portfolio_config)
-        portfolio.fit(kwargs=self.sim_params)
 
-        # Loop over different option configs
-        print("Loading option chains")
-        option_list = []
-        for ticker, chain in self.option_config.items():
-            option_underlying = OptionUnderlying(ticker, kwargs=self.sim_params)
-            for config in chain:
-                option = Option(**config, underlying=option_underlying, kwargs=self.sim_params)
-                option_list.append(option)
+def compute_bs_hedge_value(
+    options: list[Option],
+    underlying: float,
+    iv_change: float | None = None,
+    dte_change: int | None = None
+):
+    """
+    Computes the value of an hedge using black scholes
+    and assuming oposite direction to that of the Option.
+    For a SHORT call it assumes it will be bought to close
+    resulting in a debit and for a LONG call it assumes
+    it will be sold to close, resulting in a credit.
 
-        # Define sequences
-        sequences = Sequences(portfolio, option_list)
-        sequences.fit(sim_params=self.sim_params)
+    :param options a list of Option ojects
+    :returns float value of the hedge
+    """
 
-        # Simulate
-        nb_periods_within_year = int(np.floor(365/self.sim_params["freq"]))
-        nb_draws = nb_periods_within_year*self.sim_params["nb_year"]
+    sell_to_close = sum(
+        [
+            100*option.compute_black_scholes_value(
+                underlying,
+                option._iv * (1 + iv_change),
+                option._days_to_expiration - dte_change
+            ) if option._option_direction == OptionDirection.LONG else 0
+            for option in options
+        ]
+    )
+
+    buy_to_close = sum(
+        [
+            -100*option.compute_black_scholes_value(
+                underlying,
+                option._iv * (1 + iv_change),
+                option._days_to_expiration - dte_change
+            ) if option._option_direction == OptionDirection.SHORT else 0
+            for option in options
+        ]
+    )
+
+    return sell_to_close + buy_to_close
+
+
+def simulate_returns(
+    *,
+    generator: RVContinuousFrozen,
+    initial_underlying: float,
+    options: list[Option],
+    simulation_config: SimulationConfig,
+    volatility_generator: RVContinuousFrozen | None = None,
+    compute_at_intrinsic: bool = True,
+    nsim: int = 5000
+) -> SimulationResults:
         
-        simulated_returns = np.array(
+    hedge_cost = compute_hedge_cost(options)
+    invested = simulation_config.portfolio_value + (simulation_config.monthly_contributions - hedge_cost)
+
+    # Draw returns from generator and project next period portfolio
+    returns = generator.rvs(size = nsim)
+    underlying_next = initial_underlying*(1 + returns)
+    invested_next = invested*(1 + returns)
+
+    # Compute hedge value
+    if compute_at_intrinsic:
+        hedge_value = np.array([compute_intrinsic_hedge_value(options, underlying) for underlying in underlying_next])
+    else:
+        vix_returns = volatility_generator.rvs(returns)
+        hedge_value = np.array(
             [
-                np.random.choice(sequences.strategy_returns, size = nb_draws, replace = True)
-                for _ in range(self.sim_params["nb_sim"])
+                compute_bs_hedge_value(
+                    options,
+                    underlying_next[i],
+                    vix_returns[i],
+                    simulation_config.returns_frequency
+                )
+                for i in range(len(underlying_next))
             ]
         )
 
-        statistics = compute_simulation_statistics(simulated_returns, self.sim_params["nb_year"])
-        model_result = (statistics['median'], statistics['average'], statistics['percentile_5th'])
-        self.model_results.append(model_result)
+    # Compute total return
+    final_portfolio = invested_next + hedge_value
+    hedged_returns = final_portfolio/(simulation_config.portfolio_value + simulation_config.monthly_contributions) - 1
 
-
-        np.median(np.exp(np.mean(np.log(1 + simulated_returns), axis = 1)) - 1)
+    return SimulationResults(
+        hedged_returns=hedged_returns,
+        unhedged_returns=returns
+    )

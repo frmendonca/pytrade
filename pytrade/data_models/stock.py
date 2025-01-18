@@ -37,6 +37,7 @@ class Stock:
         self.market_value = self.ticker_price*self.quantity
         self.return_freq = freq
 
+
 def compute_stock_returns(df: pd.DataFrame, freq: int = 1): 
     return (
         df
