@@ -15,3 +15,4 @@ class SimulationConfig:
 class SimulationResults:
     hedged_returns: np.array
     unhedged_returns: np.array
+    vix_returns: np.array

@@ -56,9 +56,9 @@ class Option:
 
     def compute_intrinsic_value(self, underlying: float):
         if self._option_type == OptionType.CALL:
-            return 100*self._contracts*max(underlying - self._strike, 0)
+            return self._contracts*max(underlying - self._strike, 0)
         else:
-            return 100*self._contracts*max(self._strike - underlying, 0)
+            return self._contracts*max(self._strike - underlying, 0)
     
 
     def compute_black_scholes_value(
@@ -92,9 +92,11 @@ class Option:
 
         if self._option_type == OptionType.CALL:
             price = underlying * norm.cdf(d1) - self._strike * math.exp(-self._r * T) * norm.cdf(d2)
-            return price
+            self._delta = norm.cdf(d1)
         
         elif self._option_type == OptionType.PUT:
             price = self._strike * math.exp(-self._r * T) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
-            return price
+            self._delta = norm.cdf(d1) - 1
+
+        return self._contracts * price
 

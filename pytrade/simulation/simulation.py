@@ -128,6 +128,7 @@ def simulate_returns(
 
     # Compute hedge value
     if compute_at_intrinsic:
+        vix_returns = np.nan
         hedge_value = np.array([compute_intrinsic_hedge_value(options, underlying) for underlying in underlying_next])
     else:
         vix_returns = volatility_generator.rvs(returns)
@@ -149,5 +150,6 @@ def simulate_returns(
 
     return SimulationResults(
         hedged_returns=hedged_returns,
-        unhedged_returns=returns
+        unhedged_returns=returns,
+        vix_returns=vix_returns
     )
