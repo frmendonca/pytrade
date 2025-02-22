@@ -86,7 +86,7 @@ def compute_bs_hedge_value(
         [
             100*option.compute_black_scholes_value(
                 underlying,
-                option._iv * (1 + iv_change),
+                max(0.08, option._iv * (1 + iv_change)),
                 option._days_to_expiration - dte_change
             ) if option._option_direction == OptionDirection.LONG else 0
             for option in options
@@ -97,7 +97,7 @@ def compute_bs_hedge_value(
         [
             -100*option.compute_black_scholes_value(
                 underlying,
-                option._iv * (1 + iv_change),
+                max(0.08, option._iv * (1 + iv_change)),
                 option._days_to_expiration - dte_change
             ) if option._option_direction == OptionDirection.SHORT else 0
             for option in options

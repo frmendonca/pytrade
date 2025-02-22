@@ -17,6 +17,7 @@ finvizfinance = "1.0.1"
 statsmodels = "0.14.2"
 lightgbm = "*"
 scikit-learn = "*"
+seaborn = "*"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
