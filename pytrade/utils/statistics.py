@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from typing import Optional
+from typing import Union
 
 import pytrade.utils.utils as utl
 from pytrade.constants import NUMERIC_ACCURACY
@@ -64,7 +64,7 @@ def hill_estimator(data: pd.Series, k: int = 50):
     return alpha
 
 
-def pickand_estimator(data: pd.Series, ks: Optional[npt.NDArray, None] = None):
+def pickand_estimator(data: pd.Series, ks: Union[npt.NDArray, None] = None):
     """
     :param data: a pandas series containing tail data
     :param ks: the set of order statistics used to compute the estimator
