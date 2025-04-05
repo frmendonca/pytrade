@@ -34,7 +34,7 @@ def maximum_to_sum(data: pd.Series, k: int) -> pd.Series:
     if not utl.check_all_same_sign(data):
         raise ValueError("Series must be either all positive or all negative")
 
-    data = data.abs()
+    data = np.abs(data)
     exp_data = data**k
 
     partial_maximums = exp_data.cummax()
@@ -72,7 +72,6 @@ def mean_excess_function(
     :param max_threshold: options, higheer threshold to check
     :return:
     """
-    data = np.sort(data)
     data = np.abs(data)
     if min_threshold is None:
         min_threshold = np.quantile(data, 0.05)
@@ -80,13 +79,13 @@ def mean_excess_function(
         max_threshold = np.quantile(data, 0.95)
 
     u_vals = np.linspace(min_threshold, max_threshold, thresholds)
-    mean_excess = []
+    mean_excess = np.zeros(len(u_vals))
 
-    for u in u_vals:
+    for i, u in enumerate(u_vals):
         excesses = data[data > u] - u
         if len(excesses) > 0:
-            mean_excess.append(excesses.mean())
+            mean_excess[i] = excesses.mean()
         else:
-            mean_excess.append(np.nan)
+            mean_excess[i] = np.nan
 
     return {"thresholds": u_vals, "mean_excesses": mean_excess}
