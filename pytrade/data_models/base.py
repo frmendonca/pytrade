@@ -1,4 +1,3 @@
-
 import numpy as np
 from dataclasses import dataclass
 from scipy.stats._distn_infrastructure import rv_continuous_frozen as RVContinuousFrozen
@@ -10,6 +9,7 @@ class SimulationConfig:
     monthly_contributions: float
     returns_frequency: int
     number_of_years: int
+
 
 @dataclass
 class SimulationResults:

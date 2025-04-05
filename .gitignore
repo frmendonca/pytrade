@@ -168,5 +168,5 @@ cython_debug/
 # csv
 *.csv
 
-# tests
-tests/
+# analysis
+pytrade/analysis/

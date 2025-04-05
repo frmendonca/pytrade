@@ -1,8 +1,8 @@
-
 import json
 import pandas as pd
 from pathlib import Path
 from typing import Any, Callable
+
 
 def read_json(path: Path) -> dict:
     """
@@ -12,9 +12,10 @@ def read_json(path: Path) -> dict:
     """
     with open(path, encoding="utf-8") as f:
         return json.load(f)
-    
+
 
 def df_factory(columns: list[str]) -> Callable[[list[tuple[Any]]], pd.DataFrame]:
     def factory(rows: list[tuple[Any]]) -> pd.DataFrame:
         return pd.DataFrame(rows, columns=columns)
+
     return factory
