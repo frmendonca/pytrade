@@ -1,4 +1,3 @@
-
 import math
 
 from enum import Enum
@@ -10,9 +9,11 @@ class OptionType(Enum):
     CALL = "CALL"
     PUT = "PUT"
 
+
 class OptionDirection(Enum):
     LONG = "LONG"
     SHORT = "SHORT"
+
 
 class Option:
     """
@@ -25,6 +26,7 @@ class Option:
     :ivar expiration_date: str expiration date in format yyyy-mm-dd
     :ivar contracts: int the number of contracts, where each unit represents 100 stocks
     """
+
     def __init__(
         self,
         strike: int,
@@ -34,7 +36,7 @@ class Option:
         option_type: OptionType,
         option_direction: OptionDirection,
         expiration_date: str,
-        contracts: int
+        contracts: int,
     ):
         self._strike = strike
         self._premium = premium
@@ -48,36 +50,33 @@ class Option:
             datetime.strptime(expiration_date, "%Y-%m-%d") - datetime.now()
         ).days
 
-
     def __repr__(self):
-        cls=self.__class__.__name__
-        return f"{cls}(strike={self._strike}, premium={self._premium}, dte={self._days_to_expiration}, iv={self._iv}, r={self._r})"  
-
+        cls = self.__class__.__name__
+        return f"{cls}(strike={self._strike}, premium={self._premium}, dte={self._days_to_expiration}, iv={self._iv}, r={self._r})"
 
     def compute_intrinsic_value(self, underlying: float):
         if self._option_type == OptionType.CALL:
-            return self._contracts*max(underlying - self._strike, 0)
+            return self._contracts * max(underlying - self._strike, 0)
         else:
-            return self._contracts*max(self._strike - underlying, 0)
-    
+            return self._contracts * max(self._strike - underlying, 0)
 
     def compute_black_scholes_value(
         self,
         underlying: float,
         iv: float | None = None,
-        days_to_expiry: int | None = None
+        days_to_expiry: int | None = None,
     ):
         """
-        Computes the value of the option using the black scholes 
+        Computes the value of the option using the black scholes
         formula.
 
         :underlying a float value representing the current underlying value
         :iv the implied volatility used to compute the formula
         :r the risk free interest rate
-        :days_to_expiry optional parameter to compute the value at a specific DTE. 
+        :days_to_expiry optional parameter to compute the value at a specific DTE.
             If None it takes the option original DTE
         """
-        
+
         if iv is None:
             iv = self._iv
 
@@ -87,16 +86,21 @@ class Option:
         T = days_to_expiry / 365.0
 
         # Calculate d1 and d2
-        d1 = (math.log(underlying / self._strike) + (self._r + 0.5 * iv**2) * T) / (iv * math.sqrt(T))
+        d1 = (math.log(underlying / self._strike) + (self._r + 0.5 * iv**2) * T) / (
+            iv * math.sqrt(T)
+        )
         d2 = d1 - iv * math.sqrt(T)
 
         if self._option_type == OptionType.CALL:
-            price = underlying * norm.cdf(d1) - self._strike * math.exp(-self._r * T) * norm.cdf(d2)
+            price = underlying * norm.cdf(d1) - self._strike * math.exp(
+                -self._r * T
+            ) * norm.cdf(d2)
             self._delta = norm.cdf(d1)
-        
+
         elif self._option_type == OptionType.PUT:
-            price = self._strike * math.exp(-self._r * T) * norm.cdf(-d2) - underlying * norm.cdf(-d1)
+            price = self._strike * math.exp(-self._r * T) * norm.cdf(
+                -d2
+            ) - underlying * norm.cdf(-d1)
             self._delta = norm.cdf(d1) - 1
 
         return self._contracts * price
-
