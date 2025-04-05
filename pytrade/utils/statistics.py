@@ -16,10 +16,12 @@ def zipf_computation(data: pd.Series):
     if not utl.check_all_same_sign(data):
         raise ValueError("Series must be either all positive or all negative")
 
-    data = data.abs().sort_values()
+    data = np.sort(np.abs(data))
     survival = pd.Series([np.mean(data > x) for x in data]).clip(NUMERIC_ACCURACY, 1)
 
-    return np.array([np.log(data), np.log(survival)])
+    return {"log_data": np.log(data), "log_survival": np.log(survival)}
+
+
 
 
 def maximum_to_sum(data: pd.Series, k: int) -> pd.Series:
@@ -70,11 +72,12 @@ def mean_excess_function(
     :param max_threshold: options, higheer threshold to check
     :return:
     """
-    data = data.sort_values()
+    data = np.sort(data)
+    data = np.abs(data)
     if min_threshold is None:
-        min_threshold = data.quantile(0.05)
+        min_threshold = np.quantile(data, 0.05)
     if max_threshold is None:
-        max_threshold = data.quantile(0.95)
+        max_threshold = np.quantile(data, 0.95)
 
     u_vals = np.linspace(min_threshold, max_threshold, thresholds)
     mean_excess = []
@@ -86,4 +89,4 @@ def mean_excess_function(
         else:
             mean_excess.append(np.nan)
 
-    return np.array([u_vals, mean_excess])
+    return {"thresholds": u_vals, "mean_excesses": mean_excess}
