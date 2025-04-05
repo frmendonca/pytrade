@@ -8,7 +8,6 @@ from pytrade.constants import NUMERIC_ACCURACY
 Methods for EVT analysis
 """
 
-
 def zipf_computation(data: pd.Series):
     """
     :param data: a pandas data containing the data
