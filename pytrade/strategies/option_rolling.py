@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from pytrade.utils import read_json
+from pytrade.utils.utils import read_json
 
 
 DATA_PATH = Path(__file__).parent.absolute() / "data"
