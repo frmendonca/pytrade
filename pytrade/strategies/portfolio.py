@@ -1,5 +1,4 @@
 
-import pandas as pd
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize, basinhopping
@@ -27,26 +26,30 @@ class Portfolio:
         weights_init = np.ones(len(self.symbols))
         weights_init = weights_init / weights_init.sum() # Normalize to 1
 
-        #optim = minimize(
-        #    fun=self._objective_function,
-        #    x0 = weights_init,
-        #    method="Nelder-Mead",
-        #    options = {"maxiter": 500}
-        #)
-
-        optim = basinhopping(
-            func = self._objective_function,
+        optim = minimize(
+            fun=self._objective_function,
             x0 = weights_init,
-            niter=1000,
+            method="Nelder-Mead",
+            options = {"maxiter": 5000}
         )
+        #minimizer_kwargs = {"method": "Nelder-Mead"}
+        #optim = basinhopping(
+        #    func = self._objective_function,
+        #    x0 = weights_init,
+        #    niter=100,
+        #    stepsize=0.01,
+        #    T = 0.1,
+        #    minimizer_kwargs=minimizer_kwargs
+        #)
 
         solution = self._normalize_weights(optim.x)
         solution_r = self.data.dot(solution)
         return {
             "weights": solution,
             "returns": solution_r,
-            "tail_index": optim.fun,
-            "bev": self._get_bev(solution_r)
+            "tail_index": self._get_tail_index(solution_r),
+            "bev": self._get_bev(solution_r),
+            "optim": optim
         }
 
 
@@ -64,8 +67,10 @@ class Portfolio:
         """
         weights = self._normalize_weights(weights)
         r = self.data.dot(weights)
-        xi = self._get_tail_index(r)
-        return xi
+        neg_r = r[r<0]
+        fn = np.max(neg_r**4)/np.sum(neg_r**4)
+        #fn = self._get_tail_index(r)
+        return fn
 
 
     @staticmethod
@@ -93,6 +98,5 @@ class Portfolio:
         :param r: sequence of returns
         :return: BEV a float
         """
-
         return np.exp(np.mean(np.log(1 + r))) - 1
 
