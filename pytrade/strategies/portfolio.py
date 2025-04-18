@@ -1,10 +1,11 @@
 
 import numpy as np
+
 import numpy.typing as npt
 from scipy.optimize import minimize, basinhopping
 from scipy.stats import genpareto
 from pytrade.integrations.yfinance_data import YFinanceClient
-
+from typing import Literal
 
 class Portfolio:
     def __init__(self, symbols: list[str]):
@@ -30,17 +31,10 @@ class Portfolio:
             fun=self._objective_function,
             x0 = weights_init,
             method="Nelder-Mead",
+            args = ("ms"),
             options = {"maxiter": 5000}
         )
-        #minimizer_kwargs = {"method": "Nelder-Mead"}
-        #optim = basinhopping(
-        #    func = self._objective_function,
-        #    x0 = weights_init,
-        #    niter=100,
-        #    stepsize=0.01,
-        #    T = 0.1,
-        #    minimizer_kwargs=minimizer_kwargs
-        #)
+        weights_init = optim.x
 
         solution = self._normalize_weights(optim.x)
         solution_r = self.data.dot(solution)
@@ -60,7 +54,7 @@ class Portfolio:
         return weights
 
 
-    def _objective_function(self, weights: npt.NDArray):
+    def _objective_function(self, weights: npt.NDArray, obj_type: Literal["ms","tail"] = "ms"):
         """
         Computes the objective function to be minimized
         :return:
@@ -68,9 +62,12 @@ class Portfolio:
         weights = self._normalize_weights(weights)
         r = self.data.dot(weights)
         neg_r = r[r<0]
-        fn = np.max(neg_r**4)/np.sum(neg_r**4)
-        #fn = self._get_tail_index(r)
-        return fn
+
+        match obj_type:
+            case "ms":
+                return np.max(neg_r**4)/np.sum(neg_r**4)
+            case "tail":
+                return self._get_tail_index(r)
 
 
     @staticmethod
