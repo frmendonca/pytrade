@@ -38,69 +38,116 @@ class Option:
         expiration_date: str,
         contracts: int,
     ):
-        self._strike = strike
-        self._premium = premium
-        self._iv = iv
-        self._r = r
-        self._option_type = option_type
-        self._option_direction = option_direction
-        self._expiration_date = expiration_date
-        self._contracts = contracts
-        self._days_to_expiration = (
+        self.strike = strike
+        self.premium = premium
+        self.iv = iv
+        self.r = r
+        self.option_type = option_type
+        self.option_direction = option_direction
+        self.expiration_date = expiration_date
+        self.contracts = contracts
+        self.days_to_expiration = (
             datetime.strptime(expiration_date, "%Y-%m-%d") - datetime.now()
         ).days
 
+
     def __repr__(self):
         cls = self.__class__.__name__
-        return f"{cls}(strike={self._strike}, premium={self._premium}, dte={self._days_to_expiration}, iv={self._iv}, r={self._r})"
+        return f"{cls}(strike={self.strike}, premium={self.premium}, dte={self.days_to_expiration}, iv={self.iv}, r={self.r})"
+
 
     def compute_intrinsic_value(self, underlying: float):
-        if self._option_type == OptionType.CALL:
-            return self._contracts * max(underlying - self._strike, 0)
+        if self.option_type == OptionType.CALL:
+            return self.contracts * max(underlying - self.strike, 0)
         else:
-            return self._contracts * max(self._strike - underlying, 0)
+            return self.contracts * max(self.strike - underlying, 0)
+
 
     def compute_black_scholes_value(
         self,
         underlying: float,
         iv: float | None = None,
         days_to_expiry: int | None = None,
-    ):
+    ) -> float:
         """
         Computes the value of the option using the black scholes
         formula.
 
-        :underlying a float value representing the current underlying value
-        :iv the implied volatility used to compute the formula
-        :r the risk free interest rate
-        :days_to_expiry optional parameter to compute the value at a specific DTE.
+        :param underlying a float value representing the current underlying value
+        :param iv the implied volatility used to compute the formula
+        :param r the risk free interest rate
+        :param days_to_expiry optional parameter to compute the value at a specific DTE.
             If None it takes the option original DTE
+        :returns the value of the option
         """
 
         if iv is None:
-            iv = self._iv
+            iv = self.iv
 
         if days_to_expiry is None:
-            days_to_expiry = self._days_to_expiration
+            days_to_expiry = self.days_to_expiration
+
+        years_to_expiry = days_to_expiry / 365.0
+
+        # Calculate d1 and d2
+        d1 = (math.log(underlying / self.strike) + (self.r + 0.5 * iv**2) * years_to_expiry) / (
+            iv * math.sqrt(years_to_expiry)
+        )
+        d2 = d1 - iv * math.sqrt(years_to_expiry)
+
+        if self.option_type == OptionType.CALL:
+            price = underlying * norm.cdf(d1) - self.strike * math.exp(
+                -self.r * years_to_expiry
+            ) * norm.cdf(d2)
+
+
+        elif self.option_type == OptionType.PUT:
+            price = self.strike * math.exp(-self.r * years_to_expiry) * norm.cdf(
+                -d2
+            ) - underlying * norm.cdf(-d1)
+
+        else:
+            price = None
+
+        return price
+
+
+    def compute_greeks(
+        self,
+        underlying: float,
+        iv: float | None = None,
+        days_to_expiry: int | None = None,
+    ) -> dict[str, float]:
+        """
+        Computes options greeks based on Black Scholes formula
+        :param underlying a float value representing the current underlying value
+        :param iv the implied volatility used to compute the formula
+        :param days_to_expiry optional parameter to compute the value at a specific DTE.
+            If None it takes the option original DTE
+        :returns the greeks
+        """
+
+        if iv is None:
+            iv = self.iv
+
+        if days_to_expiry is None:
+            days_to_expiry = self.days_to_expiration
 
         T = days_to_expiry / 365.0
 
-        # Calculate d1 and d2
-        d1 = (math.log(underlying / self._strike) + (self._r + 0.5 * iv**2) * T) / (
-            iv * math.sqrt(T)
-        )
-        d2 = d1 - iv * math.sqrt(T)
+        d1 = 1/(iv*math.sqrt(T))*(math.log(underlying/self.strike) + (self.r + 0.5*iv**2)*T)
+        d2 = d1 - iv*math.sqrt(T)
 
-        if self._option_type == OptionType.CALL:
-            price = underlying * norm.cdf(d1) - self._strike * math.exp(
-                -self._r * T
-            ) * norm.cdf(d2)
-            self._delta = norm.cdf(d1)
+        return {
+            "delta": norm.cdf(d1) if self.option_type == OptionType.CALL else norm.cdf(d1) - 1,
+            "gamma": norm.pdf(d1) / (underlying * iv * math.sqrt(T)),
+            "vega": underlying * norm.pdf(d1) * math.sqrt(T),
+            "theta": (
+                -underlying * norm.pdf(d1) * iv / (2 * math.sqrt(T)) - self.r * self.strike * math.exp(-self.r * T) * norm.cdf(d2)
+                if self.option_type == OptionType.CALL
+                else -underlying * norm.pdf(d1) * iv / (2 * math.sqrt(T)) + self.r * self.strike * math.exp(-self.r * T) * norm.cdf(d2)
+            )
+        }
 
-        elif self._option_type == OptionType.PUT:
-            price = self._strike * math.exp(-self._r * T) * norm.cdf(
-                -d2
-            ) - underlying * norm.cdf(-d1)
-            self._delta = norm.cdf(d1) - 1
 
-        return self._contracts * price
+
