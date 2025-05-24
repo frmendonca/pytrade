@@ -150,4 +150,20 @@ class Option:
         }
 
 
+    def relative_option_pricing_heavy_tails(
+        self,
+        K: float,
+        underlying: float,
+        alpha: float,
+        K_anchor: float,
+        P_anchor: float
+    ) -> float:
+
+        exponent = (1 - alpha)
+        numerator = (K - underlying)**exponent - underlying**exponent*((alpha - 1)*K + underlying)
+        denominator = (K_anchor - underlying)**exponent - underlying**exponent*((alpha - 1)*K_anchor + underlying)
+
+        return (P_anchor*(numerator / denominator)).real
+
+
 
