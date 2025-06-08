@@ -46,9 +46,33 @@ class Option:
         self.option_direction = option_direction
         self.expiration_date = expiration_date
         self.contracts = contracts
-        self.days_to_expiration = (
-            datetime.strptime(expiration_date, "%Y-%m-%d") - datetime.now()
-        ).days
+
+        try:
+            self.days_to_expiration = (
+                datetime.strptime(expiration_date, "%Y-%m-%d") - datetime.now()
+            ).days
+        except ValueError:
+            raise ValueError(f"Invalid expiration date format: '{expiration_date}'. Expected YYYY-mm-dd.")
+
+        # Call the validation method after all attributes are set
+        self._validate_instance_variables()
+
+    def _validate_instance_variables(self):
+        """
+        Validates the instance variable for the Option object
+        Raises ValueError if any validation fails
+        """
+
+        if not isinstance(self.strike, (int, float)) or self.strike <= 0:
+            raise ValueError(f"Strike price must be a positive number. Got {self.strike}")
+        if not isinstance(self.premium, (int, float)) or self.premium <= 0:
+            raise ValueError(f"Premium must be a positive number. Got {self.premium}")
+        if not isinstance(self.iv, (int, float)) or self.iv <= 0:
+            raise ValueError(f"IV must be a positive number. Got {self.iv}")
+        if not isinstance(self.r, (int, float)) or self.r < 0:
+            raise ValueError(f"Interest rate must be a positive number. Got {self.r}")
+        if not isinstance(self.contracts, (int, float)) or self.contracts <= 0:
+            raise ValueError(f"Number of contracts must be a positive number. Got {self.contracts}")
 
 
     def __repr__(self):
@@ -148,22 +172,3 @@ class Option:
                 else -underlying * norm.pdf(d1) * iv / (2 * math.sqrt(T)) + self.r * self.strike * math.exp(-self.r * T) * norm.cdf(d2)
             )
         }
-
-
-    def relative_option_pricing_heavy_tails(
-        self,
-        K: float,
-        underlying: float,
-        alpha: float,
-        K_anchor: float,
-        P_anchor: float
-    ) -> float:
-
-        exponent = (1 - alpha)
-        numerator = (K - underlying)**exponent - underlying**exponent*((alpha - 1)*K + underlying)
-        denominator = (K_anchor - underlying)**exponent - underlying**exponent*((alpha - 1)*K_anchor + underlying)
-
-        return (P_anchor*(numerator / denominator)).real
-
-
-

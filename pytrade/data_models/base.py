@@ -1,17 +1,18 @@
-import numpy as np
+import numpy.typing as npt
+import pandas as pd
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class SimulationConfig:
     portfolio_value: float
-    monthly_contributions: float
+    contributions: float
     returns_frequency: int
-    option_iv_change: float = 0.0
     option_dte_change: int = 0
 
 
 @dataclass
 class SimulationResults:
-    original_returns: np.ndarray
-    transformed_returns: np.ndarray
+    original_returns: Any
+    transformed_returns: Any
