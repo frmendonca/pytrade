@@ -24,11 +24,12 @@ class Option:
     :ivar option_type: OptionType sets the type of the option as CALL or PUT
     :ivar option_direction: OptionDirection sets the option as LONG or SHORT
     :ivar expiration_date: str expiration date in format yyyy-mm-dd
-    :ivar contracts: int the number of contracts, where each unit represents 100 stocks
+    :ivar quantity: int the number of contracts, where each unit represents 100 stocks
     """
 
     def __init__(
         self,
+        ticker: str,
         strike: int,
         premium: float,
         iv: float,
@@ -36,8 +37,9 @@ class Option:
         option_type: OptionType,
         option_direction: OptionDirection,
         expiration_date: str,
-        contracts: int,
+        quantity: int,
     ):
+        self.ticker = ticker
         self.strike = strike
         self.premium = premium
         self.iv = iv
@@ -45,7 +47,7 @@ class Option:
         self.option_type = option_type
         self.option_direction = option_direction
         self.expiration_date = expiration_date
-        self.contracts = contracts
+        self.quantity = quantity
 
         try:
             self.days_to_expiration = (
@@ -71,8 +73,8 @@ class Option:
             raise ValueError(f"IV must be a positive number. Got {self.iv}")
         if not isinstance(self.r, (int, float)) or self.r < 0:
             raise ValueError(f"Interest rate must be a positive number. Got {self.r}")
-        if not isinstance(self.contracts, (int, float)) or self.contracts <= 0:
-            raise ValueError(f"Number of contracts must be a positive number. Got {self.contracts}")
+        if not isinstance(self.quantity, (int, float)) or self.quantity <= 0:
+            raise ValueError(f"Number of contracts must be a positive number. Got {self.quantity}")
 
 
     def __repr__(self):
@@ -82,9 +84,9 @@ class Option:
 
     def compute_intrinsic_value(self, underlying: float):
         if self.option_type == OptionType.CALL:
-            return self.contracts * max(underlying - self.strike, 0)
+            return self.quantity * max(underlying - self.strike, 0)
         else:
-            return self.contracts * max(self.strike - underlying, 0)
+            return self.quantity * max(self.strike - underlying, 0)
 
 
     def compute_black_scholes_value(
