@@ -1,22 +1,50 @@
 import yfinance as yf
-import pandas as pd
-import numpy as np
+from typing import Generator, Any
+from pytrade.integrations.base import Ticker
+
+
+DATA_PARAMS = {
+    "returns": {
+        "frequencies": [1, 7, 30, 365]
+    },
+    "indicators": {
+        "sma": {
+            "frequencies": [7, 50, 200]
+        }
+    }
+}
 
 
 class YFinanceClient:
+    
+    def fetch(self, symbols: list[str]) -> dict[str,Ticker]:
+        ticker_objects = {}
+        for ticker_obj in self._fetch_data(symbols):
+            if ticker_obj.symbol != 'UNKNOWN':
+                ticker_objects[ticker_obj.symbol] = ticker_obj
 
-    @staticmethod
-    def fetch_data(symbols: list[str]) -> tuple[pd.Series, pd.DataFrame]:
+        return ticker_objects
+
+
+    def _fetch_data(self, symbols: list[str]) -> Generator[Ticker, Any, Any]:
         data = yf.download(symbols)
 
-        relevant_cols = [("Close", symbol) for symbol in symbols]
-        data = data[relevant_cols].copy()
-        data.columns = data.columns.get_level_values(level=1)
+        for sym in symbols:
+            sym_df = data[[("Close", sym)]].dropna()
+            sym_df.columns = ["Close"]
 
-        last_prices = data.iloc[-1]
+            sym_df = (
+                sym_df
+                .assign(
+                    **{f"returns_freq_{d}_days": sym_df["Close"].pct_change(d) for d in DATA_PARAMS["returns"]["frequencies"]}
+                )
+                .assign(
+                    **{f"sma_freq_{d}_days": sym_df["Close"].rolling(window = d).mean() for d in DATA_PARAMS["indicators"]["sma"]["frequencies"]}
+                )
+            )
 
-        # Compute returns
-        data = np.log(data).diff(1)
-        data = data.dropna(how="any", axis=0)
-
-        return last_prices[symbols], data[symbols] # Enforce same order as passed list
+            yield Ticker(
+                symbol = sym,
+                price = sym_df["Close"].iloc[-1],
+                data = sym_df
+            )

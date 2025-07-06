@@ -1,6 +1,7 @@
 import pandas as pd
 import yfinance as yf
-
+import typing as t
+from pytrade.data_models.base import Currency
 
 class Stock:
     """
@@ -11,15 +12,30 @@ class Stock:
     :ivar beta: float the beta for the stock
     """
 
-    def __init__(self, ticker: str, quantity: int, beta: float) -> None:
+    def __init__(
+        self,
+        ticker: str,
+        quantity: int,
+        avg_cost: float = 0.0,
+        dividend: float = 0.0,
+        currency: Currency = Currency.USD
+    ) -> t.Self:
+        
         self.ticker = ticker
         self.quantity = quantity
-        self.beta = beta
+        self.avg_cost = avg_cost
+        self.dividend = dividend
+        self.currency = currency
+
+        self.stock_data = None
+        self.ticker_price = None
+        self.return_freq = None
+
 
     def __repr__(self):
         cls = self.__class__.__name__
         return (
-            f"{cls}(ticker={self.ticker}, quantity={self.quantity}, beta={self.beta})"
+            f"{cls}(ticker={self.ticker}, quantity={self.quantity}, currency={self.currency.value})"
         )
 
     def load_stock_data(self, freq: int = 1):

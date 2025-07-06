@@ -2,7 +2,7 @@ import numpy.typing as npt
 import pandas as pd
 from dataclasses import dataclass
 from typing import Any
-
+from enum import StrEnum
 
 @dataclass
 class SimulationConfig:
@@ -16,3 +16,15 @@ class SimulationConfig:
 class SimulationResults:
     original_returns: Any
     transformed_returns: Any
+
+
+@dataclass
+class PortfolioCash:
+    currency: str
+    amount: float
+
+
+class Currency(StrEnum):
+    USD = "USD"
+    EUR = "EUR"
+    GBP = "GBP"
