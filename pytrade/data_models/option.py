@@ -19,8 +19,11 @@ class Option:
     """
     An option object
 
+    :ivar ticker: str the name of underlying stock ticker
     :ivar strike: int the strike price of the option
     :ivar premium: float the premium of the option
+    :ivar iv: float option implied volatility
+    :ivar r: float the implicit interest rate
     :ivar option_type: OptionType sets the type of the option as CALL or PUT
     :ivar option_direction: OptionDirection sets the option as LONG or SHORT
     :ivar expiration_date: str expiration date in format yyyy-mm-dd
@@ -59,12 +62,12 @@ class Option:
         # Call the validation method after all attributes are set
         self._validate_instance_variables()
 
+
     def _validate_instance_variables(self):
         """
         Validates the instance variable for the Option object
         Raises ValueError if any validation fails
         """
-
         if not isinstance(self.strike, (int, float)) or self.strike <= 0:
             raise ValueError(f"Strike price must be a positive number. Got {self.strike}")
         if not isinstance(self.premium, (int, float)) or self.premium <= 0:
@@ -101,7 +104,6 @@ class Option:
 
         :param underlying a float value representing the current underlying value
         :param iv the implied volatility used to compute the formula
-        :param r the risk free interest rate
         :param days_to_expiry optional parameter to compute the value at a specific DTE.
             If None it takes the option original DTE
         :returns the value of the option

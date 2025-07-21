@@ -1,7 +1,7 @@
 import pandas as pd
 import yfinance as yf
-import typing as t
 from pytrade.data_models.base import Currency
+from pytrade.utils.utils import compute_stock_returns
 
 class Stock:
     """
@@ -9,21 +9,23 @@ class Stock:
 
     :ivar ticker: str the symbol of the stock
     :ivar quantity: int the number of shares for a given stock
-    :ivar beta: float the beta for the stock
+    :ivar cost_basis the average cost of the stock lot
+    :ivar dividend the annual dividend paid by the company
+    :ivar currency the currency of the stock
     """
 
     def __init__(
         self,
         ticker: str,
         quantity: int,
-        avg_cost: float = 0.0,
+        cost_basis: float = 0.0,
         dividend: float = 0.0,
         currency: Currency = Currency.USD
-    ) -> t.Self:
+    ) -> None:
         
         self.ticker = ticker
         self.quantity = quantity
-        self.avg_cost = avg_cost
+        self.cost_basis = cost_basis
         self.dividend = dividend
         self.currency = currency
 
@@ -37,6 +39,7 @@ class Stock:
         return (
             f"{cls}(ticker={self.ticker}, quantity={self.quantity}, currency={self.currency.value})"
         )
+
 
     def load_stock_data(self, freq: int = 1):
         """
@@ -54,9 +57,3 @@ class Stock:
         self.return_freq = freq
 
 
-def compute_stock_returns(df: pd.DataFrame, freq: int = 1):
-    return (
-        df[["Close"]]
-        .assign(returns=df["Close"].pct_change(freq))
-        .query("returns.notna()")
-    )

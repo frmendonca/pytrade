@@ -1,7 +1,7 @@
 
 import pandas as pd
 import typing as t
-from enum import Enum
+from enum import Enum, StrEnum
 from pytrade.integrations.yfinance_data import YFinanceClient
 
 
@@ -9,6 +9,13 @@ class FxFactor(Enum):
     GBP = 0.01
     EUR = 1.0
     USD = 1.0
+
+
+class ObjectiveType(StrEnum):
+    BEV = "BEV"
+    MS = "MS"
+    INCOME = "INCOME"
+
 
 
 def unpack_portfolio(config: dict) -> dict[str, t.Any]:

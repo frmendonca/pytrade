@@ -5,9 +5,6 @@ from pytrade.portfolio.base import unpack_portfolio
 
 import scipy.optimize as opt
 
-from pytrade.portfolio.config import PORTFOLIO
-
-
 class OptimizePortfolio:
 
     def __init__(self, config: dict[str, list[t.Any]]):
@@ -16,7 +13,8 @@ class OptimizePortfolio:
 
 
     def optimize_portfolio(
-        self, bounds: dict[str, float],
+        self,
+        bounds: dict[str, float],
         objective: t.Literal["ms", "bev"] = "bev"
     ):     
 
@@ -29,7 +27,6 @@ class OptimizePortfolio:
         )
         return_df.dropna(axis = 0, inplace=True)
         initial_values = pd.Series([1.0/return_df.shape[1] for _ in range(return_df.shape[1])], index = return_df.columns)
-
 
         optimizer = opt.minimize(
             fun = self._loss_function,
