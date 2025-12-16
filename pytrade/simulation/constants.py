@@ -1,7 +1,7 @@
 from scipy.stats import norm
 from dataclasses import dataclass
 from typing import List
-
+from sklearn.linear_model import LinearRegression
 from pytrade.constants import NUMERIC_INFINITY
 
 

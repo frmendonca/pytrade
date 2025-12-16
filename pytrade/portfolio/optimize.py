@@ -1,9 +1,9 @@
 import typing as t
 import pandas as pd
 import numpy as np
-from pytrade.portfolio.base import unpack_portfolio
-
+from pytrade.portfolio.base import unpack_portfolio, ObjectiveType
 import scipy.optimize as opt
+
 
 class OptimizePortfolio:
 
@@ -27,6 +27,7 @@ class OptimizePortfolio:
         )
         return_df.dropna(axis = 0, inplace=True)
         initial_values = pd.Series([1.0/return_df.shape[1] for _ in range(return_df.shape[1])], index = return_df.columns)
+
 
         optimizer = opt.minimize(
             fun = self._loss_function,
@@ -52,19 +53,19 @@ class OptimizePortfolio:
 
     def _loss_function(self, weights: pd.Series, return_df: pd.DataFrame, objective: t.Literal["ms", "bev"]) -> float:
         weights = pd.Series(weights, index = return_df.columns)
-
         weighted_returns = self._compute_weighted_returns(return_df, weights)
 
-        if objective == "ms":
+        if objective == ObjectiveType.MS:
             left_tail_ms_4 = self._compute_ms(weighted_returns[weighted_returns < 0], 4)
             right_tail_ms_4 = self._compute_ms(weighted_returns[weighted_returns > 0], 4)
             return left_tail_ms_4 - right_tail_ms_4
         
 
-        elif objective == "bev":
+        elif objective == ObjectiveType.BEV:
             bev = self._compute_bev(weighted_returns)
             annual_bev = ((1 + bev)**252 - 1)
             return -annual_bev
+        
 
     @staticmethod
     def _compute_ms(returns: pd.Series, k: int):

@@ -1,33 +1,33 @@
 
 import numpy as np
-import pandas as pd
-import numpy.typing as npt
 
-from pytrade.data_models.base import SimulationConfig, SimulationResults
+from pytrade.simulation.base import SimulationConfig, SimulationResults
 from pytrade.data_models.option import Option, OptionDirection, OptionType
+from pytrade.models.vix_returns.model import model_predict as vix_predict
+from pytrade.integrations.yfinance_data import YFinanceClient
 
 
 def compute_hedge_cost(options: list[Option]) -> float:
     """
     Computes the total debit (credit if negative)
     for a given option strategy
-    :param options: list[Option] a set of Option objects
+    :param options: list[Option] a set  of Option objects
     :returns float the debt or credit (if negative) of the strategy
     """
     total_cost = 0.0
     for option in options:
         if option.option_direction == OptionDirection.LONG:
-            total_cost += 100 * option.premium * option.contracts
+            total_cost += 100 * option.premium * option.quantity
         elif option.option_direction == OptionDirection.SHORT:
-            total_cost -= 100 * option.premium * option.contracts
+            total_cost -= 100 * option.premium * option.quantity
 
     return total_cost
 
 
 def compute_hedge_value(
     options: list[Option],
-    returns: npt.NDArray,
     underlying: float,
+    iv_change: float = 0.0,
     dte_change: int = 0.0,
 ):
     """
@@ -38,89 +38,34 @@ def compute_hedge_value(
     it will be sold to close, resulting in a credit.
 
     :param options a list of Option objects
-    :param returns an array with returns
     :param underlying a float with the current underlying asset price
-    :param dte_change Optional int with the change in days_to_expiry to use in the computation. If null uses Option object dte
+    :param iv_change percentage change in option iv
+    :param dte_change Optional int with the change in days_to_expiry to use in the computation.
+        If null uses Option object dte
     :returns float value of the hedge
     """
 
     hedge_value = 0.0
     for option in options:
-        new_iv = link_stock_returns_to_implied_volatility_exp(
-            option.iv,
-            returns,
-            6,
-            0.10
-        )
         calculate = (
-                100 * option.compute_black_scholes_value(
-                    underlying,
-                    new_iv,
-                    option.days_to_expiration + dte_change
-                ) * option.contracts
+            100 * option.compute_black_scholes_value(
+                underlying,
+                option.iv * (1 + iv_change),
+                option.days_to_expiration + dte_change
+            ) * option.quantity
         )
         if option.option_direction == OptionDirection.LONG:
             hedge_value += calculate
         elif option.option_direction == OptionDirection.SHORT:
             hedge_value -= calculate
 
-        return hedge_value
-
-
-
-def link_stock_returns_to_implied_volatility_exp(
-    current_iv: float,
-    stock_return: float | npt.NDArray,
-    iv_elasticity_exp: float = 5.0,  # A new default value, typically higher than linear factor
-    min_iv: float = 0.01,  # Minimum implied volatility (e.g., 1%)
-) -> float:
-    """
-    Models the relationship between underlying stock returns and option implied volatility (IV)
-    using an exponential formulation. This method captures a more aggressive and non-linear
-    response of IV, particularly during significant market downturns, better reflecting
-    the 'leverage effect'.
-
-    :param current_iv: The current implied volatility as a decimal (e.g., 0.20 for 20%).
-                Must be greater than 0.
-    :param stock_return: The percentage change in the underlying stock price as a decimal
-                  (e.g., 0.01 for +1%, -0.02 for -2%).
-    :param iv_elasticity_exp: A positive factor influencing the exponential change in IV.
-                       Higher values mean a stronger, more non-linear response.
-                       This parameter typically needs to be calibrated.
-    :param min_iv: A floor for the implied volatility to ensure it never goes below a
-            sensible positive value (e.g., 0.01 for 1%)..
-
-
-    :returns The new implied volatility after the stock return, as a decimal.
-
-    :raises ValueError: If current_iv is not positive, iv_elasticity_exp is negative,
-                    or min_iv are invalid.
-    """
-    # --- Input Validation ---
-    if not (0 < current_iv):
-        raise ValueError(f"Current implied volatility must be positive.")
-    if iv_elasticity_exp < 0:
-        raise ValueError("IV elasticity factor cannot be negative.")
-    if not (0 <= min_iv):
-        raise ValueError(f"Min_iv ({min_iv * 100:.2f}%) must be non-negative")
-
-    # Exponential model: current_iv * exp(-k * stock_return)
-    # If stock_return is negative (drop), -iv_elasticity_exp*stock_return is positive, exp() > 1, IV increases.
-    # If stock_return is positive (rise), -iv_elasticity_exp*stock_return is negative, exp() < 1, IV decreases.
-
-    new_iv = current_iv * np.exp(-iv_elasticity_exp * stock_return)
-
-    # Ensure IV stays within sensible bounds (min_iv and max_iv)
-    return np.maximum(min_iv, new_iv)
-
+    return hedge_value
 
 
 def simulate_returns(
     *,
-    returns: pd.Series,
-    initial_underlying: float,
-    options: list[Option],
-    simulation_config: SimulationConfig
+    simulation_config: SimulationConfig,
+    options: list[Option]
 ) -> SimulationResults:
     """
     Transforms a sequence of returns into a sequence
@@ -131,17 +76,37 @@ def simulate_returns(
     at T1. The original returns from T0 to T1 are then adjusted reflect the
     change in the option strategy
 
-    :param returns a pandas series containing original returns
-    :param initial_underlying a float with the current underlying price
-    :param options a list of Option objects with the option strategy
     :param simulation_config a SimulationConfig object with the configuration for the simulations
+    :param options a list of Option objects with the option strategy
     :returns SimulationResults
     """
 
+    # Setup client and fetch symbol data
+    sym = simulation_config.underlying_ticker
+    yf_client = YFinanceClient()
+    fetcher = yf_client.fetch([sym])
+    ticker = fetcher[sym]
+
+    df = ticker.data
+    df[f"{sym}_returns"] = df["Close"].pct_change(simulation_config.returns_frequency)
+    df = df.dropna()
+
+    initial_underlying = ticker.price
+    returns = df[f"{sym}_returns"].dropna().values
+
+    # Compute changes of VIX based on
+    # returns of underlying
+    iv_change = vix_predict(df[[f"{sym}_returns"]])
+
+    hedge_allocation = simulation_config.hedge_allocation * simulation_config.portfolio_value
     strategy_cost = compute_hedge_cost(options)
-    invested = simulation_config.portfolio_value + (
-        simulation_config.contributions - strategy_cost
-    )
+
+    if strategy_cost > hedge_allocation:
+        raise RuntimeError(f"Strategy cost is {strategy_cost} but maximum allocation was {hedge_allocation}. Increase hedge_allocation percentage")
+    else:
+        hedge_allocation = strategy_cost
+
+    invested = simulation_config.portfolio_value - hedge_allocation
 
     # Change in underlying price from T0 to T1
     underlying_next = initial_underlying * (1 + returns)
@@ -152,8 +117,8 @@ def simulate_returns(
         [
             compute_hedge_value(
                 options,
-                returns[i],
                 underlying_next[i],
+                iv_change[i],
                 simulation_config.option_dte_change,
             )
             for i in range(len(underlying_next))
@@ -161,13 +126,60 @@ def simulate_returns(
     )
 
     # Compute total return
-    final_portfolio = invested_next + strategy_value
+    final_portfolio = np.maximum(invested_next + strategy_value, 0)
     strategy_returns = (
-        final_portfolio
-        / (simulation_config.portfolio_value + simulation_config.contributions)
-        - 1
+        final_portfolio / simulation_config.portfolio_value - 1
     )
 
     return SimulationResults(
-        transformed_returns=strategy_returns, original_returns=returns
+        transformed_returns=strategy_returns,
+        original_returns=returns,
+        hedge_cost=hedge_allocation
     )
+
+
+
+res = simulate_returns(
+    simulation_config=SimulationConfig(
+        underlying_ticker="SPY",
+        returns_frequency=30,
+        portfolio_value=66000,
+        hedge_allocation=0.05,
+        option_dte_change=-30
+    ),
+    options=[
+        Option(
+            ticker = "SPY",
+            strike = 530,
+            premium = 1.15,
+            iv = 0.29883,
+            r = 0.045,
+            option_type=OptionType.PUT,
+            option_direction=OptionDirection.LONG,
+            expiration_date="2025-11-21",
+            quantity=5
+        ),
+        Option(
+            ticker = "SPY",
+            strike = 500,
+            premium = 0.80,
+            iv = 0.34053,
+            r = 0.045,
+            option_type=OptionType.PUT,
+            option_direction=OptionDirection.SHORT,
+            expiration_date="2025-11-21",
+            quantity=5
+        )
+    ]
+)
+
+
+import pandas as pd
+df = pd.DataFrame([res.original_returns, res.transformed_returns], index = ["original", "transformed"]).T
+
+np.exp(np.mean(np.log(1 + df), axis = 0)) ** 12 - 1
+
+
+
+df.sort_values(by = "original")
+
