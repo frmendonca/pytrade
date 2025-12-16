@@ -1,20 +1,19 @@
 
 from pytrade.portfolio.optimize import OptimizePortfolio
-from pytrade.portfolio.config import PORTFOLIO
+from pytrade.portfolio import PORTFOLIO
 
 if __name__ == "main":
 
     optimizer = OptimizePortfolio(PORTFOLIO)
     bounds = {
         'NVO': 0.075,
-        "VWCE.DE": 0.50,
-        "SCHD": 0.20,
-        'SXRV.DE': 0.10,
-        'TTE.PA': 0.05,
+        "VWCE.DE": 1.0,
+        "SCHD": 0.50,
+        'NQSE.DE': 1.0,
+        "QQQI": 0.10,
         'MSFT': 0.075,
-        "BATS.L": 0.05,
-        "NVDA": 0.075,
-        "AAPL": 0.075
+        "AAPL": 0.075,
+        "GOOG": 0.075
     }
 
     res = optimizer.optimize_portfolio(
