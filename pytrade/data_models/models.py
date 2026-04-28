@@ -68,6 +68,7 @@ class OptionModel:
 
             case _:
                 NotImplementedError("Option type has to be Call or Put")
+                
 
     @staticmethod
     def _black_scholes_put(
