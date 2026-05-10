@@ -146,3 +146,4 @@ class OptionStrategy:
             strategy_value += opt_price
 
         return strategy_value
+

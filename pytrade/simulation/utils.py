@@ -25,7 +25,6 @@ def generate_bootstrap_blocks(x: np.array, seq_len: int, num_resamples: int = 10
 
 
 
-
 def block_resample(original_sequence: np.array, block_length: int = 30, resample_sequence_lenght: int = 30) -> np.array:
 
     n = len(original_sequence)
