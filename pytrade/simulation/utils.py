@@ -1,13 +1,44 @@
 
 import numpy as np
+import yfinance as yf
 
-def generate_bootstrap_blocks(x: np.array, seq_len: int) -> np.array:
 
-    # Get all possible starting points
-    x_truncated = x[:-seq_len]
-    n = len(x_truncated)
+def compute_correlation_matrix(tickers: list[str], freq: int = 1) -> np.array:
+    df = yf.download(tickers, period = "max")
+    return (
+        df["Close"]
+        .pct_change(freq)
+        .corr()
+    )
 
-    return [x[i:i+seq_len] for i in range(n)]
+
+def generate_bootstrap_blocks(x: np.array, seq_len: int, num_resamples: int = 1000) -> np.array:
+
+    n = len(x)
+    if seq_len > n:
+        raise ValueError("seq_len cannot be greater than the length of the input data.")
+    
+    max_start_idx = n - seq_len + 1
+    start_indices = np.random.randint(0, max_start_idx, size = num_resamples)
+
+    return np.array([x[i : i + seq_len] for i in start_indices])
+
+
+
+
+def block_resample(original_sequence: np.array, block_length: int = 30, resample_sequence_lenght: int = 30) -> np.array:
+
+    n = len(original_sequence)
+    if block_length > n:
+        raise ValueError("block_length cannot be greater than the length of the input data.")
+    
+    number_of_blocks = resample_sequence_lenght // block_length + 1
+    max_start_idx = n - block_length + 1
+    
+    # Sample blocks
+    sampled_start_idx = np.random.choice(max_start_idx, number_of_blocks, replace = True)
+    return np.hstack([original_sequence[i: i + block_length] for i in sampled_start_idx])
+
 
 
 
