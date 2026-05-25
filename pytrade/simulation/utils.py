@@ -1,6 +1,7 @@
 
 import numpy as np
 import yfinance as yf
+from numba import njit
 
 
 def compute_correlation_matrix(tickers: list[str], freq: int = 1) -> np.array:
@@ -12,32 +13,44 @@ def compute_correlation_matrix(tickers: list[str], freq: int = 1) -> np.array:
     )
 
 
-def generate_bootstrap_blocks(x: np.array, seq_len: int, num_resamples: int = 1000) -> np.array:
+def block_resample(
+    original_sequence: np.array,
+    block_length: int = 30,
+    resample_sequence_lenght: int = 30,
+    seed: int | None = None
+) -> np.array:
+    """
+    Stationary Block Bootstrap (Politis & Romano, 1994).
 
-    n = len(x)
-    if seq_len > n:
-        raise ValueError("seq_len cannot be greater than the length of the input data.")
-    
-    max_start_idx = n - seq_len + 1
-    start_indices = np.random.randint(0, max_start_idx, size = num_resamples)
+    Block lengths are drawn from Geometric(p = 1 / block_length), so the
+    *average* block length equals the supplied `block_length` but each block
+    independently varies.  Wrap-around (circular) indexing ensures every
+    observation is equally likely to start a block, eliminating the end-of-series
+    bias of the fixed-length bootstrap.
 
-    return np.array([x[i : i + seq_len] for i in start_indices])
-
-
-
-
-def block_resample(original_sequence: np.array, block_length: int = 30, resample_sequence_lenght: int = 30) -> np.array:
-
+    Parameters
+    ----------
+    original_sequence        : 1-D array of historical returns.
+    block_length             : Target *mean* block length.
+    resample_sequence_lenght : Desired output length (intentional typo preserved
+                               for backward compatibility).
+    seed                     : Optional RNG seed for reproducibility.
+    """
     n = len(original_sequence)
     if block_length > n:
         raise ValueError("block_length cannot be greater than the length of the input data.")
-    
-    number_of_blocks = resample_sequence_lenght // block_length + 1
-    max_start_idx = n - block_length + 1
-    
-    # Sample blocks
-    sampled_start_idx = np.random.choice(max_start_idx, number_of_blocks, replace = True)
-    return np.hstack([original_sequence[i: i + block_length] for i in sampled_start_idx])
+
+    rng = np.random.default_rng(seed)
+    p = 1.0 / block_length          # geometric distribution parameter
+    result: list = []
+
+    while len(result) < resample_sequence_lenght:
+        actual_len = int(rng.geometric(p))          # random block length, mean = block_length
+        start      = int(rng.integers(0, n))        # circular: any index equally likely
+        indices    = [(start + k) % n for k in range(actual_len)]
+        result.extend(original_sequence[indices].tolist())
+
+    return np.array(result[:resample_sequence_lenght])
 
 
 
@@ -70,3 +83,27 @@ def compute_naked_put_return_on_margin(strike_price, underlying_price, premium):
     
     # Return = Premium collected / Capital tied up
     return premium / margin_requirement, downside_protection
+
+
+
+
+@njit
+def apply_stop_loss(data, premium_limit):
+    """
+    Once a path's P&L crosses below `premium_limit`, close the position and
+    forward-fill at exactly `premium_limit` for all remaining days.
+
+    The previous implementation froze the value at the prior day's P&L, which
+    could differ substantially from the stop level on gap-move days and did not
+    correctly propagate the stop forward on consecutive breaches.
+    """
+    n, t = data.shape
+    for i in range(n):
+        stopped = False
+        for j in range(1, t):
+            if stopped:
+                data[i, j] = premium_limit
+            elif data[i, j] < premium_limit:
+                data[i, j] = premium_limit
+                stopped = True
+    return data
