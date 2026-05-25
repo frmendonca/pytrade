@@ -20,6 +20,7 @@ scikit-learn = "*"
 seaborn = "*"
 ta = "*"
 openpyxl = "*"
+numba = "*"
 
 [tool.poetry.group.test.dependencies]
 pytest-randomly = "^3.15.0"
