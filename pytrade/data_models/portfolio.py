@@ -13,6 +13,7 @@ class StockPosition:
     ticker: str
     allocation: float = 1.0
     leverage: float = 1.0
+    expense_ratio: float = 0.001
 
 
 
@@ -85,10 +86,19 @@ class Portfolio(BaseSimulationModel):
     
     
     def _apply_leverage_factor(self, df: pd.DataFrame) -> pd.DataFrame:
+        SW = 1.1
+        FFR = 0.03
+
         for position in self.positions:
             ticker = position.ticker
             leverage_factor = position.leverage
-            df[ticker] = df[ticker] * leverage_factor
+            expense_ratio = position.expense_ratio
+
+            E = 0.005 * (leverage_factor - 1)
+            SP = np.sign(leverage_factor) * 0.004
+
+            cost_of_leverage = SW * (leverage_factor - 1) * (FFR + SP) + E
+            df[ticker] = df[ticker] * leverage_factor - ((cost_of_leverage + expense_ratio) / 365)
 
         return df
     
@@ -103,14 +113,18 @@ class Portfolio(BaseSimulationModel):
         starting_portfolio: float = 10000,
         anual_withdrawal_rate: float = 0.04,
         minimum_monthly_withdrawal_amount: float = 1000,
+        maximum_monthly_withdrawal_amount: float = 2000,
         horizon_years: int = 30,
         drawdown_deferral: int = 0,
         bootstrap_min_block_len: int = 1,
         bootstrap_max_block_len: int = 36,
         num_simulations: int = 1000,
+        anual_inflation_rate: float = 0.03,
         seed: int = 0
     ):
         
+        monthly_inflation_rate = anual_inflation_rate / 12
+
         sequence_lenght = horizon_years * 12
         outputs = {
             "portfolio_value": np.full(shape = (num_simulations, sequence_lenght), fill_value = np.nan),
@@ -120,7 +134,12 @@ class Portfolio(BaseSimulationModel):
 
 
         np.random.seed(seed)
-        block_lens = np.random.randint(low = bootstrap_min_block_len, high = bootstrap_max_block_len, size = num_simulations)
+        block_lens = np.random.randint(
+            low = bootstrap_min_block_len,
+            high = bootstrap_max_block_len,
+            size = num_simulations
+        )
+
         for i in range(num_simulations):
             b = block_lens[i]
             bootstrapped_returns = self.block_bootstrap_returns(
@@ -133,13 +152,21 @@ class Portfolio(BaseSimulationModel):
             current_portfolio = starting_portfolio
             outputs["sampled_returns"][i,:] = bootstrapped_returns
 
+            mimwa_ = minimum_monthly_withdrawal_amount
+            mamwa_ = maximum_monthly_withdrawal_amount
             for t in range(sequence_lenght):
                 r = bootstrapped_returns[t]
                 current_portfolio *= (1 + r)
 
             
                 monthly_withdrawal_amount = (
-                    min(max(minimum_monthly_withdrawal_amount, anual_withdrawal_rate / 12 * current_portfolio), current_portfolio)
+                    min(
+                        min(
+                            max(mimwa_, anual_withdrawal_rate / 12 * current_portfolio),
+                            mamwa_
+                        ),
+                        current_portfolio
+                    )
                     if t >= drawdown_deferral else 0
                 )
 
@@ -149,78 +176,109 @@ class Portfolio(BaseSimulationModel):
 
                 outputs["portfolio_value"][i,t] = current_portfolio
 
+                # Adjust minimum_monthly_withdrawal_amount for inflation
+                mimwa_ *= (1 + monthly_inflation_rate)
+                mamwa_ *= (1 + monthly_inflation_rate)
+
 
         return BaseSimulationResults(simulation_output = outputs)
     
 
 
     def generate_simulation_report(self, simulation_results: BaseSimulationResults):
+        import matplotlib.ticker as mticker
 
-        dict_results = simulation_results.simulation_output
-        starting_portfolio_aprox = np.median(dict_results["portfolio_value"][:,0])
+        dict_results  = simulation_results.simulation_output
+        portfolio_arr = dict_results["portfolio_value"]   # (num_sim, seq_len)
+        withdraw_arr  = dict_results["withdrawals"]        # (num_sim, seq_len)
+        _, seq_len = portfolio_arr.shape
+        months = np.arange(seq_len)
 
-        failure_rate = (dict_results["portfolio_value"] <= 0).mean(axis = 0)
-        portfolio_value_ci = np.quantile(dict_results["portfolio_value"], q = [0.025, 0.975], axis = 0).T
-        avg_portfolio_value = dict_results["portfolio_value"].mean(axis = 0)
-        prob_amount_falling_below = (dict_results["portfolio_value"] <= starting_portfolio_aprox).mean(axis = 0)
-        withdrawals = np.quantile(dict_results["withdrawals"], q = [0.001, 0.01, 0.025, 0.05, 0.10], axis = 0).T
-        value_at_risk = np.quantile(dict_results["portfolio_value"], q = [0.001, 0.01, 0.025, 0.05], axis = 0).T
-
-
-        plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
+        # ── Derived series ─────────────────────────────────────────────────
+        failure_rate    = (portfolio_arr <= 0).mean(axis=0)
+        pv_q            = np.quantile(portfolio_arr, [0.05, 0.25, 0.50, 0.75, 0.95], axis=0)
+        wd_q            = np.quantile(withdraw_arr,  [0.10, 0.25, 0.50, 0.75, 0.90], axis=0)
+        terminal_values = portfolio_arr[:, -1]
+        pct_depleted    = (terminal_values == 0).mean()
+        survivors       = terminal_values[terminal_values > 0]
         
-        # Failure rate
-        fig, ax = plt.subplots(1,1,figsize = (8, 6))
-        ax.plot(failure_rate, color = "darkred")
-        ax.grid(alpha = 0.25)
-        ax.set_xlabel("Months drawing down")
-        ax.set_ylabel("Failure rate")
-        fig.suptitle("Failure rate")
-        plt.tight_layout()
-        plt.show()
 
-        # Portfolio value
-        fig, ax = plt.subplots(1,1,figsize = (8, 6))
-        ax.plot(avg_portfolio_value, color = "darkred", label = "Average")
-        ax.fill_between(x = range(portfolio_value_ci.shape[0]), y1 = portfolio_value_ci[:,0], y2 = portfolio_value_ci[:,1], color = "darkblue", linestyle = "--", alpha = 0.1)
-        ax.grid(alpha = 0.25)
-        ax.set_xlabel("Months drawing down")
+        # ── Shared helpers ─────────────────────────────────────────────────
+        BLUE_DARK, BLUE_MID, BLUE_LIGHT = "#1a4f7a", "#4a90d9", "#c8e0f4"
+        RED                             = "#c0392b"
+        GREEN_DARK, GREEN_MID, GREEN_LIGHT = "#1a6b3c", "#27ae60", "#a8dfc2"
+
+        year_ticks  = months[months % 12 == 0]
+        year_labels = [f"Yr {t // 12}" for t in year_ticks]
+
+        def apply_year_ticks(ax):
+            ax.set_xticks(year_ticks)
+            ax.set_xticklabels(year_labels, fontsize=8)
+
+
+        def currency_fmt(x, _):
+            if   x >= 1_000_000: return f"${x / 1_000_000:.1f}M"
+            elif x >= 1_000:     return f"${x / 1_000:.0f}K"
+            return f"${x:.0f}"
+
+        plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+        fig, axes = plt.subplots(4, 1, figsize=(12, 14))
+        fig.suptitle("Portfolio Simulation Report", fontsize=15, fontweight="bold")
+
+        # ── 1. Depletion Rate ──────────────────────────────────────────────
+        ax = axes[0]
+        ax.plot(months, failure_rate * 100, color=RED, linewidth=2)
+        for ref, ls in [(5, "--"), (10, ":")]:
+            ax.axhline(ref, color="grey", linewidth=0.9, linestyle=ls, alpha=0.7, label=f"{ref}%")
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.0f}%"))
+        ax.tick_params(axis="x", labelrotation=65)
+        ax.set_title("Portfolio Depletion Rate", fontweight="bold")
+        ax.set_ylabel("Cumulative probability")
+        ax.legend(title="Reference", fontsize=8)
+        apply_year_ticks(ax)
+
+        # ── 2. Portfolio Value Fan ─────────────────────────────────────────
+        ax = axes[1]
+        ax.fill_between(months, pv_q[0], pv_q[4], color=BLUE_LIGHT, alpha=0.55, label="5th – 95th")
+        ax.fill_between(months, pv_q[1], pv_q[3], color=BLUE_MID,   alpha=0.50, label="25th – 75th")
+        ax.plot(months, pv_q[2], color=BLUE_DARK, linewidth=2, label="Median")
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(currency_fmt))
+        ax.tick_params(axis="x", labelrotation=65)
+        ax.set_title("Portfolio Value", fontweight="bold")
         ax.set_ylabel("Value")
-        fig.suptitle("Portfolio Value")
-        plt.tight_layout()
-        plt.show()
+        ax.set_yscale("log")
+        ax.legend(fontsize=8)
+        apply_year_ticks(ax)
 
-        # Prob falling short
-        fig, ax = plt.subplots(1,1,figsize = (8, 6))
-        ax.plot(prob_amount_falling_below)
-        ax.grid(alpha = 0.25)
-        ax.set_xlabel("Months drawing down")
-        ax.set_ylabel("Probability")
-        fig.suptitle("Probability of portfolio value falling below starting point")
-        plt.tight_layout()
-        plt.show()
+        # ── 3. Terminal Value Histogram ────────────────────────────────────
+        ax = axes[2]
+        if len(survivors) > 0:
+            ax.hist(survivors, bins=40, color=BLUE_MID, edgecolor="white",
+                    linewidth=0.5, alpha=0.85, label="Survivors")
+            ax.axvline(np.median(survivors), color=BLUE_DARK, linewidth=1.5,
+                       linestyle="--", label=f"Median: {currency_fmt(np.median(survivors), None)}")
+        ax.xaxis.set_major_formatter(mticker.FuncFormatter(currency_fmt))
+        ax.tick_params(axis="x", labelrotation=30)
+        ax.set_title("Terminal Portfolio Value", fontweight="bold")
+        ax.set_xlabel(f"Value at year {seq_len // 12}")
+        ax.set_ylabel("Frequency")
+        ax.annotate(f"{pct_depleted:.1%} fully depleted", xy=(0.97, 0.92),
+                    xycoords="axes fraction", ha="right", fontsize=10,
+                    color=RED, fontweight="bold")
+        ax.legend(fontsize=8)
 
+        # ── 4. Withdrawal Trajectory ───────────────────────────────────────
+        ax = axes[3]
+        ax.fill_between(months, wd_q[0], wd_q[4], color=GREEN_LIGHT, alpha=0.55, label="10th – 90th")
+        ax.fill_between(months, wd_q[1], wd_q[3], color=GREEN_MID,   alpha=0.50, label="25th – 75th")
+        ax.plot(months, wd_q[2], color=GREEN_DARK, linewidth=2, label="Median")
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(currency_fmt))
+        ax.tick_params(axis="x", labelrotation=65)
+        ax.set_title("Monthly Withdrawal", fontweight="bold")
+        ax.set_ylabel("Amount")
+        ax.legend(fontsize=8)
+        apply_year_ticks(ax)
 
-        # Withdrawals
-        fig, ax = plt.subplots(1,1,figsize = (8, 6))
-        ax.plot(withdrawals)
-        ax.grid(alpha = 0.25)
-        ax.set_xlabel("Months drawing down")
-        ax.set_ylabel("Withdrawal amount")
-        ax.legend(title = "Percentile", labels = ["0.1%", "1%", "2.5%", "5%", "10%"])
-        fig.suptitle("Withdrawal Amount - Selected Percentiles")
-        plt.tight_layout()
-        plt.show()
-
-
-        # VaR
-        fig, ax = plt.subplots(1,1,figsize = (8, 6))
-        ax.plot(value_at_risk)
-        ax.grid(alpha = 0.25)
-        ax.set_xlabel("Months drawing down")
-        ax.set_ylabel("Portfolio Value")
-        ax.legend(title = "Percentile", labels = ["0.1%", "1%", "2.5%", "5%"])
-        fig.suptitle("Portfolio Value - Selected Percentiles")
         plt.tight_layout()
         plt.show()
 
