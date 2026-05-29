@@ -207,13 +207,15 @@ class OptionStrategySimulator(BaseSimulationModel):
         # 1. Compute the underlying metrics
         expected_profit = strategy_result.mean(axis=0)
         prob_profit = (strategy_result > 0).mean(axis=0)
+
         
         q_range = [0.01, 0.05, 0.15, 0.5, 0.95]
         profit_quantiles = np.quantile(strategy_result, q_range, axis=0)
         
         # 2. Define the time steps (indices) and labels
-        time_indices = [5, 10, 15, -1]
-        headers = ["Metric", "5 Days", "10 Days", "15 Days", "Expiration"]
+        ndays = len(expected_profit)
+        time_indices = [int(q) for q in np.linspace(int(ndays*0.1), int(ndays*0.9), 4)] + [-1]
+        headers = ["Metric"] + [f"{i} Days" for i in time_indices[1:-1]] + ["Expiration"]
         
         # 3. Compile rows and format values
         rows = [
