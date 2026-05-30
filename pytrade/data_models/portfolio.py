@@ -1,6 +1,7 @@
 
 import pandas as pd
 import numpy as np
+import requests
 import yfinance as yf
 from dataclasses import dataclass
 from functools import reduce
@@ -65,6 +66,8 @@ class Portfolio(BaseSimulationModel):
         df_monthly = (1 + df).resample("ME").prod() - 1
         self.data = df_monthly
 
+        self._fetch_inflation_data() # Fetches inflation from ECB's ReST API
+
 
     def _process_returns(self, df: pd.DataFrame) -> pd.DataFrame:
         df_returns =  (
@@ -103,6 +106,31 @@ class Portfolio(BaseSimulationModel):
         return df
     
 
+    def _fetch_inflation_data(self):
+        url = (
+            "https://data-api.ecb.europa.eu/service/data/"
+            "ICP/M.PT.N.000000.4.ANR?format=jsondata"
+        )
+
+        resp  = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        data  = resp.json()
+
+        observations = data["dataSets"][0]["series"]["0:0:0:0:0:0"]["observations"]
+        dates_raw    = data["structure"]["dimensions"]["observation"][0]["values"]
+
+        dates  = pd.to_datetime([d["id"] for d in dates_raw], format="%Y-%m") + pd.offsets.MonthEnd(0)
+        values = [observations[str(i)][0] for i in range(len(dates))]
+
+        hicp = pd.Series(values, index=dates, dtype=float)
+        # ECB reports annual % change -> convert to equivalent monthly rate
+        monthly_inflation = (1 + hicp / 100) ** (1 / 12) - 1
+
+        aligned = monthly_inflation.reindex(self.data.index).ffill()
+        if aligned.notna().any():
+            self.data["INFLATION"] = aligned
+
+
     def _build_portfolio(self):
         allocations = [position.allocation for position in self.positions]
         self.data["PRTF"] = self.data[self.tickers].dot(allocations)
@@ -119,17 +147,20 @@ class Portfolio(BaseSimulationModel):
         bootstrap_min_block_len: int = 1,
         bootstrap_max_block_len: int = 36,
         num_simulations: int = 1000,
-        anual_inflation_rate: float = 0.03,
+        inflation_rate_fallback: float = 0.03,
         seed: int = 0
     ):
         
-        monthly_inflation_rate = anual_inflation_rate / 12
+        has_empirical_inflation = (
+            "INFLATION" in self.data.columns and self.data["INFLATION"].notna().any()
+        )
 
-        sequence_lenght = horizon_years * 12
+        sequence_length = horizon_years * 12
         outputs = {
-            "portfolio_value": np.full(shape = (num_simulations, sequence_lenght), fill_value = np.nan),
-            "sampled_returns": np.full(shape = (num_simulations, sequence_lenght), fill_value = np.nan),
-            "withdrawals": np.full(shape = (num_simulations, sequence_lenght), fill_value = np.nan),
+            "portfolio_value": np.full(shape = (num_simulations, sequence_length), fill_value = np.nan),
+            "sampled_returns": np.full(shape = (num_simulations, sequence_length), fill_value = np.nan),
+            "sampled_inflation": np.full(shape = (num_simulations, sequence_length), fill_value = np.nan),
+            "withdrawals": np.full(shape = (num_simulations, sequence_length), fill_value = np.nan),
         }
 
 
@@ -142,23 +173,33 @@ class Portfolio(BaseSimulationModel):
 
         for i in range(num_simulations):
             b = block_lens[i]
-            bootstrapped_returns = self.block_bootstrap_returns(
-                original_sequence = self.data["PRTF"].values,
-                block_length=b,
-                resample_sequence_lenght=sequence_lenght,
-                seed=seed+i
-            )
+            if has_empirical_inflation:
+                bootstrapped_returns, bootstrapped_inflation = self.block_resample_joint(
+                    sequences=[self.data["PRTF"].values, self.data["INFLATION"].values],
+                    block_length=b,
+                    resample_sequence_length=sequence_length,
+                    seed=seed + i
+                )
+            else:
+                bootstrapped_returns = self.block_bootstrap_returns(
+                    original_sequence=self.data["PRTF"].values,
+                    block_length=b,
+                    resample_sequence_length=sequence_length,
+                    seed=seed + i
+                )
+                bootstrapped_inflation = np.full(sequence_length, inflation_rate_fallback / 12)
+
 
             current_portfolio = starting_portfolio
             outputs["sampled_returns"][i,:] = bootstrapped_returns
+            outputs["sampled_inflation"][i,:] = bootstrapped_inflation
 
             mimwa_ = minimum_monthly_withdrawal_amount
             mamwa_ = maximum_monthly_withdrawal_amount
-            for t in range(sequence_lenght):
+            for t in range(sequence_length):
                 r = bootstrapped_returns[t]
                 current_portfolio *= (1 + r)
 
-            
                 monthly_withdrawal_amount = (
                     min(
                         min(
@@ -177,8 +218,8 @@ class Portfolio(BaseSimulationModel):
                 outputs["portfolio_value"][i,t] = current_portfolio
 
                 # Adjust minimum_monthly_withdrawal_amount for inflation
-                mimwa_ *= (1 + monthly_inflation_rate)
-                mamwa_ *= (1 + monthly_inflation_rate)
+                mimwa_ *= (1 + bootstrapped_inflation[t])
+                mamwa_ *= (1 + bootstrapped_inflation[t])
 
 
         return BaseSimulationResults(simulation_output = outputs)
@@ -330,7 +371,11 @@ class Portfolio(BaseSimulationModel):
         portfolio_values = portfolio_arr[sim_idx, :]
         returns          = dict_results["sampled_returns"][sim_idx, :]
         withdrawals      = dict_results["withdrawals"][sim_idx, :]
-        months           = range(seq_len)
+        inflation        = dict_results.get("sampled_inflation", None)
+        if inflation is not None:
+            inflation     = inflation[sim_idx, :]
+            cum_inflation = np.cumprod(1 + inflation) - 1
+        months = range(seq_len)
 
         # --- Build title ---------------------------------------------------
         title = f"Path Analysis — Rank {rank} of {num_simulations}  |  Final Value: {final_values[sim_idx]:,.0f}"
@@ -338,8 +383,10 @@ class Portfolio(BaseSimulationModel):
             title += f"  |  Depleted at month {first_zero[sim_idx]}"
 
         # --- Plot ----------------------------------------------------------
+        import matplotlib.ticker as mticker
+        n_panels = 4 if inflation is not None else 3
         plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
-        fig, axes = plt.subplots(3, 1, figsize=(10, 12))
+        fig, axes = plt.subplots(n_panels, 1, figsize=(10, 4 * n_panels))
 
         # Portfolio value
         axes[0].plot(months, portfolio_values, color="darkblue")
@@ -362,6 +409,26 @@ class Portfolio(BaseSimulationModel):
         axes[2].set_ylabel("Withdrawal Amount")
         axes[2].set_title("Withdrawal Amount")
         axes[2].grid(alpha=0.25)
+
+        # Inflation (monthly bars + cumulative line on twin axis)
+        if inflation is not None:
+            ax_inf = axes[3]
+            ax_inf.bar(months, inflation, color="#f0a855", alpha=0.65, width=1.0, label="Monthly")
+            ax_inf.axhline(y=0, color="black", linewidth=0.8, linestyle="--")
+            ax_inf.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.2%}"))
+            ax_inf.set_xlabel("Months drawing down")
+            ax_inf.set_ylabel("Monthly Inflation")
+            ax_inf.set_title("Inflation")
+            ax_inf.grid(alpha=0.25)
+
+            ax_cum = ax_inf.twinx()
+            ax_cum.plot(months, cum_inflation, color="#d4720a", linewidth=2, label="Cumulative")
+            ax_cum.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.1%}"))
+            ax_cum.set_ylabel("Cumulative Inflation")
+
+            lines1, labels1 = ax_inf.get_legend_handles_labels()
+            lines2, labels2 = ax_cum.get_legend_handles_labels()
+            ax_inf.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc = "upper left")
 
         fig.suptitle(title, fontsize=13)
         plt.tight_layout()

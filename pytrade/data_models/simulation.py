@@ -2,6 +2,8 @@
 import numpy as np
 from typing import Any
 from dataclasses import dataclass
+from pytrade.simulation.utils import block_resample
+from pytrade.simulation.utils import block_resample_joint
 
 @dataclass
 class BaseSimulationResults:
@@ -15,16 +17,32 @@ class BaseSimulationModel:
         self,
         original_sequence: np.array,
         block_length: int = 30,
-        resample_sequence_lenght: int = 30,
+        resample_sequence_length: int = 30,
         seed: int = 12345
     ) -> np.array:
         """Generate a single bootstrapped return sequence."""
-        from pytrade.simulation.utils import block_resample
+        
         return block_resample(
             original_sequence,
             block_length=block_length,
-            resample_sequence_lenght=resample_sequence_lenght,
+            resample_sequence_length=resample_sequence_length,
             seed=seed
+        )
+    
+
+    def block_resample_joint(
+        self,
+        sequences: list[np.ndarray],
+        block_length: int,
+        resample_sequence_length: int,
+        seed: int | None = None
+    ) -> list[np.ndarray]:
+        
+        return block_resample_joint(
+            sequences,
+            block_length,
+            resample_sequence_length,
+            seed
         )
     
 
@@ -60,7 +78,6 @@ class BaseSimulationModel:
                                     (paths may be calmer or wilder than the IV implies).
         seed              : Master RNG seed for full reproducibility.
         """
-        from pytrade.simulation.utils import block_resample
 
         rng = np.random.default_rng(seed)
         hist_daily_vol = np.std(original_sequence)
@@ -70,7 +87,7 @@ class BaseSimulationModel:
             path = block_resample(
                 original_sequence,
                 block_length=block_length,
-                resample_sequence_lenght=seq_len,
+                resample_sequence_length=seq_len,
                 seed=int(rng.integers(0, 2**31))
             )
 

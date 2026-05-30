@@ -16,7 +16,7 @@ def compute_correlation_matrix(tickers: list[str], freq: int = 1) -> np.array:
 def block_resample(
     original_sequence: np.array,
     block_length: int = 30,
-    resample_sequence_lenght: int = 30,
+    resample_sequence_length: int = 30,
     seed: int | None = None
 ) -> np.array:
     """
@@ -32,8 +32,7 @@ def block_resample(
     ----------
     original_sequence        : 1-D array of historical returns.
     block_length             : Target *mean* block length.
-    resample_sequence_lenght : Desired output length (intentional typo preserved
-                               for backward compatibility).
+    resample_sequence_length : Desired output length
     seed                     : Optional RNG seed for reproducibility.
     """
     n = len(original_sequence)
@@ -44,13 +43,49 @@ def block_resample(
     p = 1.0 / block_length          # geometric distribution parameter
     result: list = []
 
-    while len(result) < resample_sequence_lenght:
+    while len(result) < resample_sequence_length:
         actual_len = int(rng.geometric(p))          # random block length, mean = block_length
         start      = int(rng.integers(0, n))        # circular: any index equally likely
         indices    = [(start + k) % n for k in range(actual_len)]
         result.extend(original_sequence[indices].tolist())
 
-    return np.array(result[:resample_sequence_lenght])
+    return np.array(result[:resample_sequence_length])
+
+
+
+def block_resample_joint(
+    sequences: list[np.ndarray],
+    block_length: int,
+    resample_sequence_length: int,
+    seed: int | None = None
+) -> list[np.ndarray]:
+    """
+    Stationary Joint Block Bootstrap for multiple sequences.
+
+    Block lengths are drawn from Geometric(p = 1 / block_length), so the
+    *average* block length equals the supplied `block_length` but each block
+    independently varies.  Wrap-around (circular) indexing ensures every
+    observation is equally likely to start a block, eliminating the end-of-series
+    bias of the fixed-length bootstrap.
+
+    Parameters
+    ----------
+    sequences                : list of 1-D array of historical sequences.
+    block_length             : Target *mean* block length.
+    resample_sequence_length : Desired output length
+    seed                     : Optional RNG seed for reproducibility.
+    """
+    
+    n = len(sequences[0])
+    rng = np.random.default_rng(seed)
+    p = 1.0 / block_length
+    indices: list[int] = []
+    while len(indices) < resample_sequence_length:
+        actual_len = int(rng.geometric(p))
+        start = int(rng.integers(0, n))
+        indices.extend((start + k) % n for k in range(actual_len))
+    indices = np.array(indices[:resample_sequence_length])
+    return [seq[indices] for seq in sequences]
 
 
 
