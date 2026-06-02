@@ -167,6 +167,7 @@ cython_debug/
 
 # csv
 *.csv
+!data/external/*.parquet
 
 # analysis
 pytrade/analysis/

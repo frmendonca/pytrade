@@ -5,6 +5,7 @@ import requests
 import yfinance as yf
 from dataclasses import dataclass
 from functools import reduce
+from pathlib import Path
 import matplotlib.pyplot as plt
 from pytrade.data_models.simulation import BaseSimulationModel, BaseSimulationResults
 
@@ -15,7 +16,6 @@ class StockPosition:
     allocation: float = 1.0
     leverage: float = 1.0
     expense_ratio: float = 0.001
-
 
 
 
@@ -30,8 +30,9 @@ class Portfolio(BaseSimulationModel):
         if (total_allocation > 1 + 1e-6) | (total_allocation < 1 - 1e-6):
             raise RuntimeError(f"Allocations must sum to 1.0. Got {total_allocation}")
         
-        self._fetch_data() # Fetch data
-        self._build_portfolio() # Construct portfolio weighted average
+        self._fetch_data()               # Fetch data
+        self._apply_external_padding()   # Pad historical returns from local parquet files
+        self._build_portfolio()          # Construct portfolio weighted average
     
 
     @property
@@ -63,7 +64,8 @@ class Portfolio(BaseSimulationModel):
             .pipe(self._apply_leverage_factor) # Apply leverage
         )
         
-        df_monthly = (1 + df).resample("ME").prod() - 1
+    
+        df_monthly = (1 + df).resample("ME").prod(min_count=1) - 1
         self.data = df_monthly
 
         self._fetch_inflation_data() # Fetches inflation from ECB's ReST API
@@ -84,7 +86,7 @@ class Portfolio(BaseSimulationModel):
                 df_returns[ticker] = padded_df
                 df_returns = df_returns.drop(columns = [t for t in ct])
 
-        return df_returns.dropna()    
+        return df_returns
 
     
     
@@ -107,6 +109,7 @@ class Portfolio(BaseSimulationModel):
     
 
     def _fetch_inflation_data(self):
+        # --- ECB (recent, ~1997+) -----------------------------------------
         url = (
             "https://data-api.ecb.europa.eu/service/data/"
             "ICP/M.PT.N.000000.4.ANR?format=jsondata"
@@ -126,14 +129,60 @@ class Portfolio(BaseSimulationModel):
         # ECB reports annual % change -> convert to equivalent monthly rate
         monthly_inflation = (1 + hicp / 100) ** (1 / 12) - 1
 
+        # --- Local parquet backfill (historical, e.g. pre-1997) -----------
+        external_dir = Path(__file__).resolve().parent.parent.parent / "data" / "external"
+        if external_dir.exists():
+            for parquet_path in external_dir.glob("*.parquet"):
+                ext_df = pd.read_parquet(parquet_path)
+                if "INFLATION" not in ext_df.columns:
+                    continue
+                ext_df.index = ext_df.index + pd.offsets.MonthEnd(0)
+                # ECB wins where it has data; parquet fills historical gaps
+                monthly_inflation = monthly_inflation.combine_first(ext_df["INFLATION"])
+                break  # first matching file wins
+
+        # --- Align to self.data index -------------------------------------
         aligned = monthly_inflation.reindex(self.data.index).ffill()
         if aligned.notna().any():
             self.data["INFLATION"] = aligned
 
 
+    def _apply_external_padding(self):
+        
+        external_dir = Path(__file__).resolve().parent.parent.parent / "data" / "external"
+        if not external_dir.exists():
+            return
+
+        portfolio_tickers = set(self.tickers)
+
+        for parquet_path in external_dir.glob("*.parquet"):
+            ext_df = pd.read_parquet(parquet_path)
+            
+            if not isinstance(ext_df.index, pd.DatetimeIndex):
+                continue
+
+            # Normalize index to month-end to align with self.data
+            ext_df.index = ext_df.index + pd.offsets.MonthEnd(0)
+
+            matching_tickers = portfolio_tickers & set(ext_df.columns)
+            if not matching_tickers:
+                continue
+
+            # Extend self.data to cover the historical date range in the parquet file
+            combined_index = self.data.index.union(ext_df.index)
+            self.data = self.data.reindex(combined_index)
+            
+            for ticker in matching_tickers:
+                # yfinance data takes priority; parquet fills in historical gaps
+                self.data[ticker] = self.data[ticker].fillna(
+                    ext_df[ticker].reindex(combined_index)
+                )
+
+
     def _build_portfolio(self):
         allocations = [position.allocation for position in self.positions]
         self.data["PRTF"] = self.data[self.tickers].dot(allocations)
+        self.data = self.data.dropna(subset=["PRTF"])
 
 
     def simulate_withdrawal_failure_rate(
@@ -269,13 +318,9 @@ class Portfolio(BaseSimulationModel):
         # ── 1. Depletion Rate ──────────────────────────────────────────────
         ax = axes[0]
         ax.plot(months, failure_rate * 100, color=RED, linewidth=2)
-        for ref, ls in [(5, "--"), (10, ":")]:
-            ax.axhline(ref, color="grey", linewidth=0.9, linestyle=ls, alpha=0.7, label=f"{ref}%")
-        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.0f}%"))
         ax.tick_params(axis="x", labelrotation=65)
         ax.set_title("Portfolio Depletion Rate", fontweight="bold")
         ax.set_ylabel("Cumulative probability")
-        ax.legend(title="Reference", fontsize=8)
         apply_year_ticks(ax)
 
         # ── 2. Portfolio Value Fan ─────────────────────────────────────────
