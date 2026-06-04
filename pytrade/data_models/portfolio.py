@@ -272,7 +272,126 @@ class Portfolio(BaseSimulationModel):
 
 
         return BaseSimulationResults(simulation_output = outputs)
-    
+
+
+    def estimate_perpetual_withdrawal_rate(
+        self,
+        horizon_years: int = 30,
+        num_simulations: int = 1000,
+        bootstrap_min_block_len: int = 1,
+        bootstrap_max_block_len: int = 36,
+        inflation_rate_fallback: float = 0.03,
+        seed: int = 0
+    ) -> BaseSimulationResults:
+        """
+        For each bootstrapped path, solve analytically for the annual withdrawal rate w*
+        such that the final portfolio value equals the inflation-adjusted initial value
+        (i.e. the portfolio maintained its real purchasing power over the horizon).
+
+        Returns a distribution of w* across simulations. Negative values indicate paths
+        where returns were so poor that real value could not be preserved even at w=0.
+        """
+        has_empirical_inflation = (
+            "INFLATION" in self.data.columns and self.data["INFLATION"].notna().any()
+        )
+
+        T = horizon_years * 12
+        prtf_seq = self.data["PRTF"].values
+        inf_seq  = self.data["INFLATION"].values if has_empirical_inflation else None
+
+        w_stars     = np.empty(num_simulations)
+        ret_store   = np.empty((num_simulations, T))
+        inf_store   = np.empty((num_simulations, T))
+
+        np.random.seed(seed)
+        block_lens = np.random.randint(
+            low=bootstrap_min_block_len,
+            high=bootstrap_max_block_len,
+            size=num_simulations
+        )
+
+        for i in range(num_simulations):
+            b = block_lens[i]
+            if has_empirical_inflation:
+                r, inf = self.block_resample_joint(
+                    sequences=[prtf_seq, inf_seq],
+                    block_length=b,
+                    resample_sequence_length=T,
+                    seed=seed + i
+                )
+            else:
+                r   = self.block_bootstrap_returns(prtf_seq, block_length=b,
+                                                   resample_sequence_length=T, seed=seed + i)
+                inf = np.full(T, inflation_rate_fallback / 12)
+
+            # CPI_{t-1} for each withdrawal month t=1..T  →  [1, 1+inf[0], ...]
+            cpi_mult = np.concatenate([[1.0], np.cumprod(1 + inf[:-1])])
+
+            # Suffix growth: suffix_g[k] = prod(1+r[j] for j=k..T-1), suffix_g[T] = 1
+            suffix_g = np.concatenate([np.cumprod((1 + r)[::-1])[::-1], [1.0]])
+
+            total_growth = suffix_g[0]        # A
+            terminal_cpi = np.prod(1 + inf)   # CPI_T
+            B = np.dot(cpi_mult, suffix_g[1:]) / 12.0
+
+            w_stars[i]   = (total_growth - terminal_cpi) / B
+            ret_store[i] = r
+            inf_store[i] = inf
+
+        return BaseSimulationResults(simulation_output={
+            "perpetual_withdrawal_rates": w_stars,
+            "sampled_returns":            ret_store,
+            "sampled_inflation":          inf_store,
+        })
+
+
+    def plot_perpetual_withdrawal_rate_distribution(
+        self,
+        simulation_results: BaseSimulationResults
+    ) -> None:
+        import matplotlib.ticker as mticker
+
+        outputs  = simulation_results.simulation_output
+        w_stars  = outputs["perpetual_withdrawal_rates"]
+        ret_store = outputs["sampled_returns"]
+
+        percentiles = [1, 5, 15, 50, 95]
+        pct_values  = np.percentile(w_stars, percentiles)
+        total_growth_per_sim = np.prod(1 + ret_store, axis=1)
+
+        BLUE_DARK, BLUE_MID = "#1a4f7a", "#4a90d9"
+        RED                  = "#c0392b"
+
+        plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        fig.suptitle("Perpetual Withdrawal Rate Distribution", fontsize=14, fontweight="bold")
+
+        # ── 1. Histogram with percentile markers ──────────────────────────
+        ax = axes[0]
+        ax.hist(w_stars, bins=60, color=BLUE_MID, edgecolor="white", linewidth=0.4, alpha=0.85)
+        colors = [RED, "#e67e22", BLUE_DARK, "#27ae60", "#1a6b3c"]
+        for pct, val, col in zip(percentiles, pct_values, colors):
+            ax.axvline(val, color=col, linewidth=1.5, linestyle="--",
+                       label=f"p{pct}: {val:.1%}")
+        ax.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0))
+        ax.set_xlabel("Annual withdrawal rate (w*)")
+        ax.set_ylabel("Frequency")
+        ax.set_title("Distribution of Perpetual Withdrawal Rate")
+        ax.legend(fontsize=8)
+
+        # ── 2. Scatter: w* vs total return ─────────────────────────────────
+        ax = axes[1]
+        ax.scatter(total_growth_per_sim, w_stars, alpha=0.25, s=8, color=BLUE_MID)
+        ax.axhline(0, color=RED, linewidth=1.0, linestyle="--")
+        ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.1f}x"))
+        ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0))
+        ax.set_xlabel(f"Total portfolio growth over horizon")
+        ax.set_ylabel("Annual withdrawal rate (w*)")
+        ax.set_title("Withdrawal Rate vs Total Return")
+
+        plt.tight_layout()
+        plt.show()
+
 
 
     def generate_simulation_report(self, simulation_results: BaseSimulationResults):
@@ -317,7 +436,8 @@ class Portfolio(BaseSimulationModel):
 
         # ── 1. Depletion Rate ──────────────────────────────────────────────
         ax = axes[0]
-        ax.plot(months, failure_rate * 100, color=RED, linewidth=2)
+        ax.plot(months, failure_rate, color=RED, linewidth=2)
+        ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0))
         ax.tick_params(axis="x", labelrotation=65)
         ax.set_title("Portfolio Depletion Rate", fontweight="bold")
         ax.set_ylabel("Cumulative probability")
@@ -431,7 +551,7 @@ class Portfolio(BaseSimulationModel):
         import matplotlib.ticker as mticker
         n_panels = 4 if inflation is not None else 3
         plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
-        fig, axes = plt.subplots(n_panels, 1, figsize=(10, 4 * n_panels))
+        fig, axes = plt.subplots(n_panels, 1, figsize=(14, 4 * n_panels))
 
         # Portfolio value
         axes[0].plot(months, portfolio_values, color="darkblue")
