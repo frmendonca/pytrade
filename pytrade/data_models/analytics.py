@@ -207,7 +207,7 @@ class PortfolioAnalytics:
         BLUE_MID, RED = "#4a90d9", "#c0392b"
         BLUE_DARK     = "#1a4f7a"
 
-        pct_labels = [50, 95, 99]
+        pct_labels = [50, 75, 99]
         depth_pcts    = np.percentile(depths,    pct_labels)
         duration_pcts = np.percentile(durations, pct_labels)
 
