@@ -31,7 +31,6 @@ class Portfolio(BaseSimulationModel, PortfolioAnalytics):
             raise RuntimeError(f"Allocations must sum to 1.0. Got {total_allocation}")
 
         self._fetch_data()               # Fetch data
-        self._apply_external_padding()   # Pad historical returns from local parquet files
         self._build_portfolio()          # Construct portfolio weighted average
 
 
@@ -68,7 +67,9 @@ class Portfolio(BaseSimulationModel, PortfolioAnalytics):
         df_monthly = (1 + df).resample("ME").prod(min_count=1) - 1
         self.data = df_monthly
 
-        self._fetch_inflation_data() # Fetches inflation from ECB's ReST API
+        self._apply_external_padding()   # Pad historical returns from local parquet files
+        self._fetch_inflation_data()     # Fetches inflation from ECB's ReST API
+        
 
 
     def _process_returns(self, df: pd.DataFrame) -> pd.DataFrame:
