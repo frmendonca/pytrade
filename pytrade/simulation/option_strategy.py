@@ -192,8 +192,11 @@ class OptionStrategySimulator(BaseSimulationModel):
             for j in range(nsim)
         ]
 
-        with Pool(processes=n_cores) as pool:
-            results = pool.map(_run_single_path, task_args)
+        if n_cores == 1:
+            results = [_run_single_path(args) for args in task_args]
+        else:
+            with Pool(processes=n_cores) as pool:
+                results = pool.map(_run_single_path, task_args)
 
         return np.array(results)[:, 1:]
     
